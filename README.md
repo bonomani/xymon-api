@@ -95,8 +95,9 @@ Every tool and setting is in
 
 ## Search
 
-[`rag/`](rag) searches Xymon's manual pages, and its history through the API,
-by meaning: `xymonapi-rag.sh index` builds the index, `search` returns the
+[`rag/`](rag) searches Xymon's manual pages, read from the directory
+`XYMONAPI_RAG_DOCS` names, and its history through the API, by meaning:
+`xymonapi-rag.sh index` builds the index, `search` returns the
 passages nearest a question, and `ask` hands them to a language model that
 speaks the OpenAI-compatible API -- a local Ollama by default, so no key and no
 cost. The embeddings are computed on this machine. With a Claude subscription,
@@ -118,9 +119,8 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 They need `bash`, `curl`, and the Python modules of all three
 `requirements.txt` -- the API's, `mcp-server/`'s and `rag/`'s -- for
 `python3`, or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool` or
-Apache's `htpasswd`. The
-search test downloads the embedding model, about 65 MB, the first time.
-A test skips (exit 77) when something it needs is missing, and says what. CI
+Apache's `htpasswd`. The search test downloads the embedding model, about
+65 MB, the first time. A test skips (exit 77) when something it needs is missing, and says what. CI
 builds Xymon's `main` and runs them with nothing missing:
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
