@@ -89,6 +89,13 @@ Apache on port 8080. Check each against your server:
 - **Password**: the htpasswd file `xymon-apache.conf` names may not exist
   yet. Create it with `htpasswd -cB FILE USER` and name it in
   `XYMONAPI_PASSWD`. It is read on every request: no restart after a change.
+- **Tasks at start-up**: xymonlaunch starts every task within seconds of
+  boot, and a task that then exits is not run again until its INTERVAL has
+  passed. The index task hit a not-yet-listening API this way, so it `NEEDS
+  xymonapi` and the indexer waits a minute for an API that gives no answer.
+  Also, editing a file under `tasks.d/` does not make xymonlaunch reload:
+  `touch tasks.cfg` does, and a task is restarted only when its definition
+  changed, comments aside.
 - **Homebrew**: `$XYMONHOME/ext` is inside the Cellar, so `brew upgrade`
   drops `ext/xymonapi`. Run `make install` again. The task file and settings
   under `/opt/homebrew/etc` survive.
