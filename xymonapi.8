@@ -75,6 +75,24 @@ Apache's htpasswd program, which must be on PATH; xymonapi does not start
 if it is not, or if it cannot read the file.
 When unset, xymonapi answers anyone who can reach it.
 
+.SH FILES
+.IP "\fB$XYMONHOME/ext/xymonapi/\fR"
+The program: xymonapi.sh, the launcher the task runs; app.py and xymon.py,
+the server; openapi.yaml, the description served at /openapi.json; and
+requirements.txt, the Python modules it needs.
+.IP "\fB$XYMONHOME/etc/tasks.d/xymonapi\fR"
+The xymonlaunch task, installed with a DISABLED line. A later installation
+leaves it as it is.
+.IP "\fB$XYMONHOME/etc/xymonserver.d/\fR"
+Where the two settings under ENVIRONMENT go, in a file of your own. Nothing
+is installed there.
+.IP "\fB$XYMONSERVERLOGS/xymonapi.log\fR"
+The log, written through the task's LOGFILE. A missing Python or module is
+reported here.
+.LP
+$XYMONHOME/etc and $XYMONHOME/ext are links to wherever an installation keeps
+those directories, /etc/xymon for instance.
+
 .SH NOTES
 xymonapi speaks plain HTTP. To reach it from other machines over HTTPS, keep
 it on 127.0.0.1 and put a web server in front of it, as for the CGI programs.

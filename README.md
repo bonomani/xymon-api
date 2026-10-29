@@ -25,10 +25,27 @@ operation, every setting, and how to enable it. The OpenAPI description is
 make install XYMONHOME=/usr/lib/xymon/server
 ```
 
-`XYMONHOME` is the server directory, as `xymonserver.cfg` names it; the
-`Makefile` says where each file goes. The API is installed disabled: how to
-enable it, where it listens, and how to require a password are in
-[`xymonapi.8`](xymonapi.8).
+| variable | meaning | default |
+|---|---|---|
+| `XYMONHOME` | the Xymon server directory, as `xymonserver.cfg` names it | none: required |
+| `MANDIR` | where manual pages go | `/usr/share/man` |
+| `DESTDIR` | a staging directory put in front of every path, for a package | empty |
+
+| installed file | from |
+|---|---|
+| `$XYMONHOME/ext/xymonapi/app.py`, `xymon.py`, `openapi.yaml`, `requirements.txt` | the files of the same name |
+| `$XYMONHOME/ext/xymonapi/xymonapi.sh`, the launcher | `xymonapi.sh` |
+| `$XYMONHOME/etc/tasks.d/xymonapi`, the task, written `DISABLED` | `xymonapi.tasks.DIST`, with `@XYMONHOME@` replaced |
+| `$MANDIR/man8/xymonapi.8` | `xymonapi.8` |
+
+Xymon's own install links `$XYMONHOME/ext` and `$XYMONHOME/etc` to wherever
+those directories really are, `/etc/xymon` for instance, so the files land
+there. The task file is written only when there is none: a later install keeps
+the one you enabled. The Python modules are not installed; `pip install -r
+requirements.txt` does that, in a virtualenv if the system Python refuses.
+
+The API is installed disabled: how to enable it, where it listens, and how to
+require a password are in [`xymonapi.8`](xymonapi.8).
 
 ## Tests
 
