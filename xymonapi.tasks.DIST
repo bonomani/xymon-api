@@ -1,7 +1,7 @@
 # The Xymon API, xymonapi(8): a read-only HTTP and JSON view of this server.
 # Disabled as shipped, since it needs Python 3.10; remove DISABLED to run it.
-# Its own settings, XYMONAPI_LISTEN and XYMONAPI_PASSWD, go in a file under
-# xymonserver.d/.
+# Its own settings, listed in xymonapi(8) under ENVIRONMENT, go in a file
+# under xymonserver.d/.
 [xymonapi]
 	DISABLED
 	ENVFILE @XYMONHOME@/etc/xymonserver.cfg

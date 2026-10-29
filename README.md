@@ -49,9 +49,16 @@ those directories really are -- `$XYMONHOME/etc` to `/etc/xymon` on many
 installations -- so the files land there. The task file is written only when
 there is none: a later install keeps the one you enabled.
 
-The Python modules are not installed; `pip install -r requirements.txt` does
-that. If they go in a virtualenv, because the system Python refuses them,
-`XYMONAPI_PYTHON` must name that virtualenv's `python3`, as `xymonapi.8` says.
+With `DESTDIR`, the staged `$XYMONHOME/ext` and `$XYMONHOME/etc` are plain
+directories, where the server has Xymon's links. A package built from that
+stage should check how its tool installs a directory over a link, or put the
+files in the directories the links lead to.
+
+The Python modules are not installed. They must be importable by the user
+Xymon runs as, not only by root: `pip install --user` run as root puts them
+where that user does not look. Install them system-wide, from your
+distribution's packages for instance, or in a virtualenv that user can read,
+and then name its `python3` in `XYMONAPI_PYTHON`, as `xymonapi.8` says.
 
 The API is installed disabled: how to enable it, where it listens, and how to
 require a password are in [`xymonapi.8`](xymonapi.8). Once it runs, with the
