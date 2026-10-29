@@ -1,0 +1,66 @@
+name: test
+
+# The tests run against Xymon's main branch, built here: the API reads what a
+# real xymond answers, so that is what it is tested with. The weekly run
+# catches a change in Xymon that breaks the API when nothing here changed.
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout xymon-api
+        uses: actions/checkout@v7
+        with:
+          path: api
+
+      - name: Checkout Xymon (main)
+        uses: actions/checkout@v7
+        with:
+          repository: xymon-monitoring/xymon
+          ref: main
+          path: xymon
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libc-ares-dev libldap-dev libpcre2-dev \
+            librrd-dev libssl-dev libtirpc-dev \
+            rrdtool apache2-utils curl python3 python3-venv
+          # The system Python takes no pip installs (PEP 668); the launcher
+          # uses whichever Python PYTHON names.
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -r api/requirements.txt
+
+      # The non-interactive configure recipe of Xymon's own build.yml.
+      - name: Build Xymon
+        working-directory: xymon
+        run: |
+          USEXYMONPING=y ENABLESSL=y ENABLELDAP=y ENABLELDAPSSL=y \
+          XYMONUSER=xymon XYMONTOPDIR=/usr/lib/xymon XYMONVAR=/var/lib/xymon \
+          XYMONHOSTURL=/xymon CGIDIR=/usr/lib/xymon/cgi-bin XYMONCGIURL=/xymon-cgi \
+          SECURECGIDIR=/usr/lib/xymon/cgi-secure SECUREXYMONCGIURL=/xymon-seccgi \
+          HTTPDGID=www-data XYMONLOGDIR=/var/log/xymon \
+          XYMONHOSTNAME=localhost XYMONHOSTIP=127.0.0.1 MANROOT=/usr/share/man \
+          INSTALLBINDIR=/usr/lib/xymon/server/bin INSTALLETCDIR=/etc/xymon \
+          INSTALLWEBDIR=/etc/xymon/web INSTALLEXTDIR=/usr/lib/xymon/server/ext \
+          INSTALLTMPDIR=/var/lib/xymon/tmp INSTALLWWWDIR=/var/lib/xymon/www \
+          ./configure --server
+          make -j"$(nproc)"
+
+      - name: Test
+        env:
+          XYMON_SRC: ${{ github.workspace }}/xymon
+          PYTHON: ${{ runner.temp }}/venv/bin/python3
+          XYMONAPI_NO_SKIP: "1"
+        run: api/tests/run.sh
