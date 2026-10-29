@@ -6,25 +6,16 @@ calls its tools. Each tool is one request to a running xymonapi(8), so what
 the client gets is what the API answers, now: nothing is stored here, and
 nothing in Xymon is changed.
 
-XYMONAPI_URL is where the API is, http://127.0.0.1:1986 by default.
-XYMONAPI_USER and XYMONAPI_PASSWORD are sent when the API asks for a user.
+Where the API is, and the user to send it, are client.py's settings.
 """
 from __future__ import annotations
-
-import base64
-import json
-import os
-import urllib.error
-import urllib.request
-from urllib.parse import urlencode
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-URL = os.environ.get("XYMONAPI_URL", "http://127.0.0.1:1986").rstrip("/")
-USER = os.environ.get("XYMONAPI_USER", "")
-PASSWORD = os.environ.get("XYMONAPI_PASSWORD", "")
+import client
+
 READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 
 server = MCPServer(
@@ -34,22 +25,13 @@ server = MCPServer(
 
 
 def api(path: str, **params: str | None) -> dict:
-    """GET PATH under /xymon/api/v1 and return the JSON it answers."""
-    query = urlencode({k: v for k, v in params.items() if v})
-    req = urllib.request.Request(f"{URL}/xymon/api/v1{path}" + (f"?{query}" if query else ""))
-    if USER:
-        token = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
-        req.add_header("Authorization", f"Basic {token}")
+    """GET PATH from the API, its failure raised as a ToolError: the SDK passes
+    that text on to the client, and treats any other exception as a crash
+    whose text it keeps back."""
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return json.load(r)
-    # ToolError, not any other exception: the SDK passes its text on to the
-    # client, and treats anything else as a crash whose text it keeps back.
-    except urllib.error.HTTPError as e:
-        # The API's own explanation, not a bare status.
-        raise ToolError(f"xymonapi answered {e.code}: {e.read().decode(errors='replace')}") from e
-    except urllib.error.URLError as e:
-        raise ToolError(f"cannot reach xymonapi at {URL}: {e.reason}") from e
+        return client.api(path, **params)
+    except client.APIError as e:
+        raise ToolError(str(e)) from e
 
 
 @server.tool(annotations=READ_ONLY)

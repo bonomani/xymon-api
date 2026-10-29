@@ -55,24 +55,6 @@ sleep 0.4
 export XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:$PORT"
 start_api
 
-# mcp URL REQUEST... -- run the MCP server for the API at URL, send it the
-# initialize handshake and then each REQUEST (one JSON-RPC message, id 3 on the
-# last), keep its stdin open until the answer to id 3 is in, and leave its
-# stdout in $work/mcp.out. Returns the server's exit status.
-mcp() {
-	local url=$1 rc=0 deadline; shift
-	: > "$work/mcp.out"
-	deadline=$(( $(date +%s) + 30 ))
-	{
-		printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"xymonapi-test","version":"0"}}}' \
-			'{"jsonrpc":"2.0","method":"notifications/initialized"}' "$@"
-		while ! grep -q '"id":3' "$work/mcp.out" && [ "$(date +%s)" -lt "$deadline" ]; do
-			sleep 0.1
-		done
-	} | XYMONAPI_URL="$url" "$ROOT/mcp-server/xymonapi-mcp.sh" > "$work/mcp.out" 2> "$work/mcp.err" || rc=$?
-	return "$rc"
-}
-
 rc=0
 mcp "http://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' || rc=$?
 [ "$rc" -eq 77 ] && skip "$(cat "$work/mcp.err")"
