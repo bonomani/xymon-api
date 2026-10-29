@@ -38,7 +38,7 @@ jobs:
             librrd-dev libssl-dev libtirpc-dev \
             rrdtool apache2-utils curl python3 python3-venv
           # The system Python takes no pip installs (PEP 668); the launcher
-          # uses whichever Python PYTHON names.
+          # uses whichever Python XYMONAPI_PYTHON names.
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install -r api/requirements.txt
 
@@ -61,6 +61,6 @@ jobs:
       - name: Test
         env:
           XYMON_SRC: ${{ github.workspace }}/xymon
-          PYTHON: ${{ runner.temp }}/venv/bin/python3
+          XYMONAPI_PYTHON: ${{ runner.temp }}/venv/bin/python3
           XYMONAPI_NO_SKIP: "1"
         run: api/tests/run.sh

@@ -8,7 +8,8 @@
 # module missing -- as distinct from 1, a configuration error; the tests skip
 # on 77, as they skip on a missing compiler.
 
-PYTHON=${PYTHON:-python3}
+# XYMONAPI_PYTHON names the Python to use, a virtualenv's for instance.
+PYTHON=${XYMONAPI_PYTHON:-python3}
 
 command -v "$PYTHON" >/dev/null 2>&1 || {
 	echo "xymonapi: $PYTHON not found; the API needs Python 3.10 or later" >&2

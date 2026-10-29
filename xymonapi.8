@@ -61,7 +61,7 @@ Where the RRD files are, for /series.
 .IP "\fBXYMONSERVERCGIURL\fR"
 Where showgraph.cgi is, for /graphs.
 .LP
-Two settings are its own. Put them in a file under
+Three settings are its own. Put them in a file under
 \fBxymonserver.d/\fR beside xymonserver.cfg, which reads its files, for
 instance xymonapi.cfg:
 .IP "\fBXYMONAPI_LISTEN\fR"
@@ -74,6 +74,10 @@ whose users useradm.cgi and chpasswd.cgi manage. The password is checked by
 Apache's htpasswd program, which must be on PATH; xymonapi does not start
 if it is not, or if it cannot read the file.
 When unset, xymonapi answers anyone who can reach it.
+.IP "\fBXYMONAPI_PYTHON\fR"
+The Python to run the API with, when the modules it needs are not installed
+for the system's python3: the python3 of a virtualenv that holds them, for
+instance. The default is python3, found on PATH.
 
 .SH FILES
 .IP "\fB$XYMONHOME/ext/xymonapi/\fR"
@@ -84,8 +88,8 @@ requirements.txt, the Python modules it needs.
 The xymonlaunch task, installed with a DISABLED line. A later installation
 leaves it as it is.
 .IP "\fB$XYMONHOME/etc/xymonserver.d/\fR"
-Where the two settings under ENVIRONMENT go, in a file of your own. Nothing
-is installed there.
+A file of yours here holds the three settings of its own listed under
+ENVIRONMENT. Nothing is installed there.
 .IP "\fB$XYMONSERVERLOGS/xymonapi.log\fR"
 The log, written through the task's LOGFILE. A missing Python or module is
 reported here.

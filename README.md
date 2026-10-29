@@ -17,6 +17,8 @@ operation, every setting, and how to enable it. The OpenAPI description is
 - A Xymon server.
 - Python 3.10 or later, with the modules in [`requirements.txt`](requirements.txt).
 - `rrdtool`, for `/series`.
+- A web server running Xymon's `showgraph.cgi`, at `XYMONSERVERCGIURL`, for
+  `/graphs`.
 - Apache's `htpasswd`, only if a password file is used.
 
 ## Installing
@@ -39,10 +41,12 @@ make install XYMONHOME=/usr/lib/xymon/server
 | `$MANDIR/man8/xymonapi.8` | `xymonapi.8` |
 
 Xymon's own install links `$XYMONHOME/ext` and `$XYMONHOME/etc` to wherever
-those directories really are, `/etc/xymon` for instance, so the files land
-there. The task file is written only when there is none: a later install keeps
+those directories really are -- `$XYMONHOME/etc` to `/etc/xymon` on many
+installations -- so the files land there. The task file is written only when there is none: a later install keeps
 the one you enabled. The Python modules are not installed; `pip install -r
-requirements.txt` does that, in a virtualenv if the system Python refuses.
+requirements.txt` does that. If they go in a virtualenv, because the system
+Python refuses them, `XYMONAPI_PYTHON` must name that virtualenv's `python3`,
+as `xymonapi.8` says.
 
 The API is installed disabled: how to enable it, where it listens, and how to
 require a password are in [`xymonapi.8`](xymonapi.8).
