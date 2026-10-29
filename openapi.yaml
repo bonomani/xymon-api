@@ -7,7 +7,7 @@ info:
     alarms and its hosts. A verdict is never a colour; the colour is how the
     web pages show it. See xymonapi(8).
   license:
-    name: GPL-2.0-only
+    name: GPL-2.0-or-later
 
 servers:
   - url: /xymon/api/v1

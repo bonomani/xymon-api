@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 """HTTP server for the Xymon API.
 
 Only the operations implemented here are registered; any other path answers

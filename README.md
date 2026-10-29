@@ -45,4 +45,5 @@ builds Xymon's `main` and runs them with nothing missing:
 
 ## Licence
 
-GNU General Public License version 2, as Xymon: [`LICENSE`](LICENSE).
+GNU General Public License version 2 or, at your option, any later version
+(`GPL-2.0-or-later`); the text of version 2 is in [`LICENSE`](LICENSE).

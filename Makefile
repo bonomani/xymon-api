@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Install the Xymon API into an existing Xymon server: xymonapi(8).
 #
 #   make install XYMONHOME=/usr/lib/xymon/server

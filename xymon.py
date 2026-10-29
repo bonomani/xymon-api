@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Read a live Xymon server and map it onto the API's schemas.
 
 The data comes from ``xymondboard``'s structured fields, split on ``|``, with
