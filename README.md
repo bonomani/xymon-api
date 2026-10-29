@@ -70,6 +70,66 @@ the manual page:
 curl http://127.0.0.1:1986/xymon/api/v1/health
 ```
 
+## A worked install: Xymon from Homebrew on macOS
+
+What one real install needed, as a checklist for yours. Xymon came from
+the `xymon-server-preview` Homebrew formula (a build of `main`), running as
+the login user, with Homebrew's Apache on port 8080.
+
+```sh
+make install XYMONHOME=/opt/homebrew/opt/xymon-server-preview/server MANDIR=/opt/homebrew/share/man
+```
+
+- **Enable it**: delete the `DISABLED` line from `etc/tasks.d/xymonapi`.
+  xymonlaunch notices the change by itself and starts the task.
+- **Python**: `xymonserver.cfg` sets a PATH of its own, on which `python3`
+  was Apple's 3.9, so the task exited 77. Name a 3.10+ with the modules in
+  `XYMONAPI_PYTHON` -- here a pyenv interpreter, where `pip install -r
+  requirements.txt` had put them.
+- **rrdtool**: Homebrew's `/opt/homebrew/bin` was not on that PATH either,
+  so `/series` could not run it. Append it.
+- **Graphs**: `XYMONSERVERCGIURL` is a path, and the API prefixes
+  `XYMONWEBHOST` to reach it. That is `http://$XYMONSERVERWWWNAME`, which
+  must carry the port when the web server is not on 80:
+  `XYMONSERVERWWWNAME="localhost:8080"` in `xymonserver.cfg`.
+- **Password**: `xymon-apache.conf` already named the htpasswd file to use,
+  `$XYMONHOME/etc/xymonpasswd`; it did not exist until `htpasswd -cB`
+  created it. The API reads it on every request, so a password change needs
+  no restart.
+
+The settings file, `etc/xymonserver.d/xymonapi.cfg`, ended up as:
+
+```sh
+XYMONAPI_PYTHON="/Users/me/.pyenv/versions/3.12.3/bin/python3"
+XYMONAPI_LISTEN="127.0.0.1:1986"
+XYMONAPI_PASSWD="/opt/homebrew/opt/xymon-server-preview/server/etc/xymonpasswd"
+PATH="$PATH:/opt/homebrew/bin"
+```
+
+Mind that `$XYMONHOME/ext` is inside the Homebrew Cellar there, so
+`brew upgrade` of the formula drops `ext/xymonapi`: run `make install`
+again after one. The task file and the settings live under `/opt/homebrew/etc`
+and survive.
+
+For the MCP server below, the same Python needs `mcp-server/requirements.txt`
+and, for the two searches, `rag/requirements.txt`. Register it once, at user
+scope so every project has it, with the credentials and the man page
+directory the index reads:
+
+```sh
+claude mcp add --scope user xymon \
+  -e XYMONAPI_URL=http://127.0.0.1:1986 \
+  -e XYMONAPI_USER=me -e XYMONAPI_PASSWORD=... \
+  -e XYMONAPI_PYTHON=/Users/me/.pyenv/versions/3.12.3/bin/python3 \
+  -e XYMONAPI_RAG_DOCS=/opt/homebrew/opt/xymon-server-preview/share/man \
+  -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
+```
+
+Then build the index with the same variables in the environment:
+`rag/xymonapi-rag.sh index` read 1874 passages from the man pages and
+30 days of history in about a minute, after a one-time 65 MB model download.
+Rerun it now and then: the history part is only as fresh as the last run.
+
 ## MCP server
 
 [`mcp-server/`](mcp-server) gives an AI client that speaks the Model Context
