@@ -19,8 +19,8 @@ operation, every setting, and how to enable it. The OpenAPI description is
   there is ignored, and with it the password the API should ask for.
 - Python 3.10 or later, with the modules in [`requirements.txt`](requirements.txt).
 - `rrdtool`, for `/series`.
-- A web server running Xymon's `showgraph.cgi`, at `XYMONSERVERCGIURL`, for
-  `/graphs`.
+- A web server running Xymon's CGI programs at `XYMONSERVERCGIURL`, for
+  `/graphs`: it asks their `showgraph.sh`.
 - Apache's `htpasswd`, only if a password file is used.
 
 ## Installing
@@ -62,25 +62,25 @@ and then name its `python3` in `XYMONAPI_PYTHON`, as `xymonapi.8` says.
 
 The API is installed disabled: how to enable it, where it listens, and how to
 require a password are in [`xymonapi.8`](xymonapi.8). Once it runs, with the
-default address, this checks it:
+default address, this checks it; what each answer means is under `/health` in
+the manual page:
 
 ```sh
 curl http://127.0.0.1:1986/xymon/api/v1/health
 ```
 
-It answers `{"alive":true,...}` while xymond runs, `{"alive":false}` if xymond
-does not answer, and 401 without `-u user:password` when a password file is
-set.
-
 ## Tests
 
-The tests start a real `xymond`, so they run against a server build of
-Xymon's current `main`, and use its test helpers, which no release has:
+The tests run against a server build of Xymon's current `main`: one of them
+starts its `xymond`, and all of them use its test helpers, which no release
+has. `XYMON_SRC` names that tree, and is required: without it every test fails
+at once.
 
 ```sh
 XYMON_SRC=/path/to/built/xymon tests/run.sh
 ```
 
+They need `bash` and `curl`; some also need `rrdtool` or Apache's `htpasswd`.
 A test skips (exit 77) when something it needs is missing, and says what. CI
 builds Xymon's `main` and runs them with nothing missing:
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
