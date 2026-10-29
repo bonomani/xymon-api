@@ -29,6 +29,7 @@ XYMON = os.environ.get("XYMON", "xymon")
 XYMSRV = os.environ.get("XYMSRV", "")
 XYMONRRDS = os.environ.get("XYMONRRDS", "")
 XYMONSERVERCGIURL = os.environ.get("XYMONSERVERCGIURL", "").rstrip("/")
+XYMONWEBHOST = os.environ.get("XYMONWEBHOST", "").rstrip("/")
 XYMONHISTDIR = os.environ.get("XYMONHISTDIR", "")
 XYMONHISTLOGS = os.environ.get("XYMONHISTLOGS", "")
 BOARD_FIELDS = ["hostname", "testname", "color", "lastchange"]
@@ -183,8 +184,15 @@ def graph(entity: str | None, test: str | None, frm: str, to: str) -> bytes:
                    "action": "view"})
     if not XYMONSERVERCGIURL:
         raise RuntimeError("XYMONSERVERCGIURL is not set")
-    with urllib.request.urlopen(f"{XYMONSERVERCGIURL}/showgraph.sh?{q}",
-                                timeout=30) as r:
+    # xymonserver.cfg gives XYMONSERVERCGIURL as a path, "/xymon-cgi": the
+    # web pages use it relative to themselves. A URL needs the host, which
+    # XYMONWEBHOST holds ("http://www.foo.com"), as Xymon's own pages do.
+    url = XYMONSERVERCGIURL
+    if "://" not in url:
+        if not XYMONWEBHOST:
+            raise RuntimeError("XYMONSERVERCGIURL is a path and XYMONWEBHOST is not set")
+        url = XYMONWEBHOST.rstrip("/") + "/" + url.lstrip("/")
+    with urllib.request.urlopen(f"{url}/showgraph.sh?{q}", timeout=30) as r:
         return r.read()
 
 
