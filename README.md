@@ -43,7 +43,9 @@ It writes into the Xymon server directory, so it is normally run as root.
 | `$XYMONHOME/ext/xymonapi/app.py`, `xymon.py`, `openapi.yaml`, `requirements.txt` | the files of the same name |
 | `$XYMONHOME/ext/xymonapi/xymonapi.sh`, the launcher | `xymonapi.sh` |
 | `$XYMONHOME/etc/tasks.d/xymonapi`, the task, written `DISABLED` | `xymonapi.tasks.DIST`, with `@XYMONHOME@` replaced |
-| `$MANDIR/man8/xymonapi.8` | `xymonapi.8` |
+| `$XYMONHOME/ext/xymonapi/rag/`, the search and its launcher, and `mcp-server/client.py` it reads the API with | `rag/xymonrag.py`, `xymonapi-rag.sh`, `requirements.txt`, `mcp-server/client.py` |
+| `$XYMONHOME/etc/tasks.d/xymonapi-rag`, the daily index task, written `DISABLED` | `rag/xymonapi-rag.tasks.DIST` |
+| `$MANDIR/man8/xymonapi.8`, `$MANDIR/man1/xymonapi-rag.1` | the pages of the same name |
 
 Xymon's own install links `$XYMONHOME/ext` and `$XYMONHOME/etc` to wherever
 those directories really are -- `$XYMONHOME/etc` to `/etc/xymon` on many
@@ -143,8 +145,9 @@ rag/xymonapi-rag.sh search "what does purple mean"
 ```
 
 The first run downloads a 65 MB embedding model; indexing takes about a
-minute. The index holds the last 30 days of history, so rerun `index` now and
-then, from cron or an xymonlaunch task. `ask` hands the passages to a
+minute. The index holds the last 30 days of history, so `make install` also
+writes a daily xymonlaunch task, `tasks.d/xymonapi-rag`, DISABLED: remove the
+line, and put the variables above in a file under `xymonserver.d/`. `ask` hands the passages to a
 language model speaking the OpenAI-compatible API, a local Ollama by default;
 with Claude, the MCP tools are the simpler way. Every command and setting is
 in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).

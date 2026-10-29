@@ -19,7 +19,11 @@ the colour changes since $XYMONAPI_RAG_SINCE with the status text saved at
 each, at most 1000 of them; cuts them into passages, one per manual-page
 section or item and one per change; and stores a vector for each in
 $XYMONAPI_RAG_INDEX, replacing what was there. Run it again to take in what
-has changed since -- an xymonlaunch task with an INTERVAL does that. When
+has changed since: the task \fBtasks.d/xymonapi-rag\fR, which make install
+writes DISABLED, does so once a day. To run it, remove that line and put
+XYMONAPI_RAG_DOCS -- and XYMONAPI_USER and XYMONAPI_PASSWORD when the API
+asks for them -- in a file under xymonserver.d/ that only the Xymon user
+can read. When
 the history cannot be read -- a /histlog refused for another reason than a
 status that was not saved -- it stops and leaves the index as it was.
 \fB--no-history\fR reads the manual pages only.

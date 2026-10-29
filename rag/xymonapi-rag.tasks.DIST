@@ -1,0 +1,12 @@
+# Rebuild the index of xymonapi-rag(1) once a day, so search_history of
+# xymonapi-mcp(1) sees recent colour changes. Disabled as shipped: it needs
+# the Python modules in rag/requirements.txt, and XYMONAPI_RAG_DOCS, with
+# XYMONAPI_USER and XYMONAPI_PASSWORD when the API asks for them, set in a
+# file under xymonserver.d/. Remove DISABLED to run it.
+[xymonapi-rag]
+	DISABLED
+	ENVFILE @XYMONHOME@/etc/xymonserver.cfg
+	NEEDS xymond
+	INTERVAL 1d
+	CMD $XYMONHOME/ext/xymonapi/rag/xymonapi-rag.sh index
+	LOGFILE $XYMONSERVERLOGS/xymonapi-rag.log
