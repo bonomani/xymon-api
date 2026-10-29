@@ -1,0 +1,86 @@
+.TH XYMONAPI 8 "Version 4.3.30:  4 Sep 2019" "Xymon"
+.SH NAME
+xymonapi \- read-only HTTP and JSON interface to the Xymon server
+.SH SYNOPSIS
+.B "$XYMONHOME/ext/xymonapi/xymonapi.sh"
+
+.SH DESCRIPTION
+xymonapi answers HTTP requests with what the Xymon server knows: the status
+board, the alarms on it, its hosts, the values in its RRD files and the
+graphs drawn from them. Answers are JSON, except for graphs, which are PNG.
+It changes nothing in Xymon: it only reads.
+
+It is optional, and shipped disabled. It is started by
+.I xymonlaunch(8)
+from the task file \fBtasks.d/xymonapi\fR beside tasks.cfg, which its
+installation creates with a DISABLED line. To run it, remove that line;
+xymonlaunch starts it once xymond is running, and restarts it if it stops.
+
+Unlike the rest of Xymon, xymonapi needs Python 3.10 or later, with the
+modules fastapi, uvicorn and yaml (requirements.txt beside it lists them).
+When one is missing it logs which, and exits with status 77.
+
+The OpenAPI description of every operation is served at /openapi.json, and
+is the file openapi.yaml beside the program.
+
+.SH OPERATIONS
+Every path is under /xymon/api/v1. Only GET is accepted, and any other path
+answers 404.
+.IP "\fB/health\fR"
+Whether xymond answers a ping, and the version it reports.
+.IP "\fB/states\fR [\fBentity\fR=HOST] [\fBtest\fR=TEST] [\fBverdict\fR=VERDICT]"
+The status board, one state per host and test. The colour is given as a
+verdict: green is ok, yellow warning, red critical, blue disabled, clear
+nodata and purple unknown.
+.IP "\fB/alarms\fR"
+Every state whose verdict is not ok.
+.IP "\fB/entities\fR"
+Each host on the board, once.
+.IP "\fB/series\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBmetric\fR=DATASET] [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
+The values of one dataset of the RRD file TEST.rrd of HOST, under
+$XYMONRRDS, read with rrdtool. DATASET defaults to lambda.
+.IP "\fB/graphs\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
+The graph
+.I showgraph.cgi(1)
+draws for HOST and TEST, fetched from $XYMONSERVERCGIURL.
+.LP
+A TIME is \fBnow\fR, seconds since the epoch, or a time relative to now such
+as \fB-30m\fR, \fB-24h\fR, \fB-7d\fR or \fB-2w\fR. \fBfrom\fR defaults to
+-24h and \fBto\fR to now. A host or test name that is not one Xymon uses,
+or a time it cannot read, is answered with 400.
+
+.SH ENVIRONMENT
+The task file loads xymonserver.cfg, and xymonapi uses these settings from it:
+.IP "\fBXYMSRV\fR"
+The Xymon server to ask. It is required; xymonapi does not fall back to
+127.0.0.1.
+.IP "\fBXYMON\fR"
+The xymon client program.
+.IP "\fBXYMONRRDS\fR"
+Where the RRD files are, for /series.
+.IP "\fBXYMONSERVERCGIURL\fR"
+Where showgraph.cgi is, for /graphs.
+.LP
+Two settings are its own. Put them in a file under
+\fBxymonserver.d/\fR beside xymonserver.cfg, which reads its files, for
+instance xymonapi.cfg:
+.IP "\fBXYMONAPI_LISTEN\fR"
+The address and port to listen on, as HOST:PORT or [ADDRESS]:PORT for IPv6.
+The default is 127.0.0.1:1986, which only this machine reaches.
+.IP "\fBXYMONAPI_PASSWD\fR"
+An htpasswd file. When set, every request needs a user and password from it,
+and is answered 401 otherwise. It is normally the file the web pages use,
+whose users useradm.cgi and chpasswd.cgi manage. The password is checked by
+Apache's htpasswd program, which must be on PATH; xymonapi does not start
+if it is not, or if it cannot read the file.
+When unset, xymonapi answers anyone who can reach it.
+
+.SH NOTES
+xymonapi speaks plain HTTP. To reach it from other machines over HTTPS, keep
+it on 127.0.0.1 and put a web server in front of it, as for the CGI programs.
+
+It answers one request at a time.
+
+.SH "SEE ALSO"
+xymonlaunch(8), tasks.cfg(5), xymonserver.cfg(5), xymon(1), showgraph.cgi(1),
+xymon(7)
