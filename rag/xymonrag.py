@@ -141,7 +141,7 @@ def history_passages(since: str) -> list[dict]:
     import client                        # mcp-server/client.py
     out = []
     try:
-        for ev in client.api("/events", since=since, limit="1000")["items"]:
+        for ev in _events_when_up(client, since):
             try:
                 log = client.api("/histlog", entity=ev["entity"], test=ev["test"],
                                  time=str(ev["epoch"]))["text"][:HISTLOG_TEXT]
@@ -161,6 +161,22 @@ def history_passages(since: str) -> list[dict]:
         raise SystemExit(f"xymonapi-rag: cannot read the history: {e}\n"
                          "  (index --no-history indexes the manual pages alone)") from e
     return out
+
+
+def _events_when_up(client, since: str) -> list[dict]:
+    """/events, waiting for the API to come up: as an xymonlaunch task, index
+    can start seconds before xymonapi listens, and its only failure then is
+    "cannot reach" with no HTTP status. Try for about a minute; anything the
+    API answers, a 401 for instance, is passed on at once."""
+    import time
+    for attempt in range(6):
+        try:
+            return client.api("/events", since=since, limit="1000")["items"]
+        except client.APIError as e:
+            if e.status is not None or attempt == 5:
+                raise
+            time.sleep(10)
+    raise AssertionError("unreachable")
 
 
 # --- The index ----------------------------------------------------------------------

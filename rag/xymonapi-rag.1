@@ -25,7 +25,9 @@ XYMONAPI_RAG_DOCS -- and XYMONAPI_USER and XYMONAPI_PASSWORD when the API
 asks for them -- in a file under xymonserver.d/ that only the Xymon user
 can read. When
 the history cannot be read -- a /histlog refused for another reason than a
-status that was not saved -- it stops and leaves the index as it was.
+status that was not saved -- it stops and leaves the index as it was. An
+API that does not answer yet, as at start-up when the task runs before
+xymonapi listens, is tried again for about a minute first.
 \fB--no-history\fR reads the manual pages only.
 .IP "\fBsearch\fR"
 Prints, as JSON, the N passages nearest QUESTION (5 by default), each with

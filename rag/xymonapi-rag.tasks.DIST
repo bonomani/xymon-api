@@ -6,7 +6,7 @@
 [xymonapi-rag]
 	DISABLED
 	ENVFILE @XYMONHOME@/etc/xymonserver.cfg
-	NEEDS xymond
+	NEEDS xymonapi
 	INTERVAL 1d
 	CMD $XYMONHOME/ext/xymonapi/rag/xymonapi-rag.sh index
 	LOGFILE $XYMONSERVERLOGS/xymonapi-rag.log
