@@ -6,7 +6,8 @@
 # With XYMONAPI_PASSWD naming an htpasswd file, the API answers only a user
 # and password that file holds, and 401 with a WWW-Authenticate challenge to
 # anything else. Both formats Apache's htpasswd writes are accepted: $apr1$,
-# its default and what Xymon's useradm and chpasswd create, and bcrypt. A user
+# its default and what Xymon's useradm and chpasswd create, and bcrypt. Every
+# path is covered, /openapi.json and FastAPI's /docs included. A user
 # name that looks like an option is refused, not passed to htpasswd as one.
 # A password file the API cannot read stops it from starting.
 #
@@ -48,6 +49,12 @@ assert_equal "401" "$(code -u alice:wrong)" "alice, wrong password"
 assert_equal "200" "$(code -u bob:s3cret)" "bob, bcrypt, right password"
 assert_equal "401" "$(code -u carol:secret)" "a user the file does not hold"
 assert_equal "401" "$(code -u -b:secret)" "a user name that looks like an option"
+
+# FastAPI serves these beside the API's own paths; a password covers them too.
+for path in /openapi.json /docs; do
+	assert_equal "401" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT$path")" "$path without a user"
+	assert_equal "200" "$(curl -s -o /dev/null -w '%{http_code}' -u alice:secret "http://127.0.0.1:$API_PORT$path")" "$path with a user"
+done
 
 stop_process "$API_PID"
 API_PID=""

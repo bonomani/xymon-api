@@ -120,15 +120,17 @@ def build_app() -> FastAPI:
             sys.exit("xymonapi: XYMONAPI_PASSWD is set, and checking it needs "
                      "Apache's htpasswd, which is not on PATH")
 
+        # Every path, not only the API's: FastAPI also serves /openapi.json
+        # and its /docs pages, and with a password set nothing is answered
+        # to a stranger.
         @app.middleware("http")
         async def _basic_auth(request, call_next):
-            if request.url.path.startswith(base + "/"):
-                creds = xymon.parse_basic(request.headers.get("authorization"))
-                if not creds or not xymon.verify_basic(*creds):
-                    return JSONResponse(
-                        {"error": "unauthorized", "detail": "a user and password are needed"},
-                        status_code=401,
-                        headers={"WWW-Authenticate": 'Basic realm="xymon"'})
+            creds = xymon.parse_basic(request.headers.get("authorization"))
+            if not creds or not xymon.verify_basic(*creds):
+                return JSONResponse(
+                    {"error": "unauthorized", "detail": "a user and password are needed"},
+                    status_code=401,
+                    headers={"WWW-Authenticate": 'Basic realm="xymon"'})
             return await call_next(request)
 
     for path, handler in ROUTES.items():
