@@ -59,7 +59,8 @@ what a host has, list $XYMONRRDS/HOST/ there, or run rrdtool info on a file.
 The graph
 .I showgraph.cgi(1)
 draws for HOST and TEST, fetched from showgraph.sh, its wrapper, at
-$XYMONSERVERCGIURL.
+$XYMONSERVERCGIURL -- prefixed with $XYMONWEBHOST when that is a path, as
+xymonserver.cfg ships it.
 .IP "\fB/events\fR [\fBentity\fR=HOST] [\fBtest\fR=TEST] [\fBsince\fR=TIME] [\fBlimit\fR=N]"
 The colour changes xymond_history recorded in $XYMONHISTDIR/allevents, the
 newest first: when, the verdict before and after, and how long the one
@@ -84,8 +85,10 @@ The Xymon server to ask. It is required; xymonapi does not fall back to
 The xymon client program.
 .IP "\fBXYMONRRDS\fR"
 Where the RRD files are, for /series.
-.IP "\fBXYMONSERVERCGIURL\fR"
-Where showgraph.cgi is, for /graphs.
+.IP "\fBXYMONSERVERCGIURL\fR, \fBXYMONWEBHOST\fR"
+Where showgraph.cgi is, for /graphs. The first is usually a path, /xymon-cgi;
+the second, http://$XYMONSERVERWWWNAME, then gives the host, and must carry
+the port when the web server is not on 80.
 .IP "\fBXYMONHISTDIR\fR, \fBXYMONHISTLOGS\fR"
 Where xymond_history keeps the events and the saved status texts, for
 /events and /histlog.

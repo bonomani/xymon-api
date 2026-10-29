@@ -70,34 +70,28 @@ the manual page:
 curl http://127.0.0.1:1986/xymon/api/v1/health
 ```
 
-## A worked install: Xymon from Homebrew on macOS
+## Pitfalls seen in practice
 
-What one real install needed, as a checklist for yours. Xymon came from
-the `xymon-server-preview` Homebrew formula (a build of `main`), running as
-the login user, with Homebrew's Apache on port 8080.
+From an install on a Homebrew Xymon (`xymon-server-preview`) on macOS, with
+Apache on port 8080. Check each against your server:
 
-```sh
-make install XYMONHOME=/opt/homebrew/opt/xymon-server-preview/server MANDIR=/opt/homebrew/share/man
-```
+- **Enabling**: delete the `DISABLED` line from `etc/tasks.d/xymonapi`.
+  xymonlaunch picks up the change on its own.
+- **Python and rrdtool**: `xymonserver.cfg` sets its own PATH. There, `python3`
+  was the system's 3.9 and `rrdtool` was missing, so the task exited 77 and
+  `/series` failed. Name a 3.10+ in `XYMONAPI_PYTHON` and append the right
+  directory to PATH.
+- **Graphs**: `XYMONSERVERCGIURL` is a path, so the API prefixes
+  `XYMONWEBHOST`, that is `http://$XYMONSERVERWWWNAME`. Put the port in
+  `XYMONSERVERWWWNAME` when the web server is not on 80: `localhost:8080`.
+- **Password**: the htpasswd file `xymon-apache.conf` names may not exist
+  yet. Create it with `htpasswd -cB FILE USER` and name it in
+  `XYMONAPI_PASSWD`. It is read on every request: no restart after a change.
+- **Homebrew**: `$XYMONHOME/ext` is inside the Cellar, so `brew upgrade`
+  drops `ext/xymonapi`. Run `make install` again. The task file and settings
+  under `/opt/homebrew/etc` survive.
 
-- **Enable it**: delete the `DISABLED` line from `etc/tasks.d/xymonapi`.
-  xymonlaunch notices the change by itself and starts the task.
-- **Python**: `xymonserver.cfg` sets a PATH of its own, on which `python3`
-  was Apple's 3.9, so the task exited 77. Name a 3.10+ with the modules in
-  `XYMONAPI_PYTHON` -- here a pyenv interpreter, where `pip install -r
-  requirements.txt` had put them.
-- **rrdtool**: Homebrew's `/opt/homebrew/bin` was not on that PATH either,
-  so `/series` could not run it. Append it.
-- **Graphs**: `XYMONSERVERCGIURL` is a path, and the API prefixes
-  `XYMONWEBHOST` to reach it. That is `http://$XYMONSERVERWWWNAME`, which
-  must carry the port when the web server is not on 80:
-  `XYMONSERVERWWWNAME="localhost:8080"` in `xymonserver.cfg`.
-- **Password**: `xymon-apache.conf` already named the htpasswd file to use,
-  `$XYMONHOME/etc/xymonpasswd`; it did not exist until `htpasswd -cB`
-  created it. The API reads it on every request, so a password change needs
-  no restart.
-
-The settings file, `etc/xymonserver.d/xymonapi.cfg`, ended up as:
+The settings file that came out of it, `etc/xymonserver.d/xymonapi.cfg`:
 
 ```sh
 XYMONAPI_PYTHON="/Users/me/.pyenv/versions/3.12.3/bin/python3"
@@ -106,45 +100,28 @@ XYMONAPI_PASSWD="/opt/homebrew/opt/xymon-server-preview/server/etc/xymonpasswd"
 PATH="$PATH:/opt/homebrew/bin"
 ```
 
-Mind that `$XYMONHOME/ext` is inside the Homebrew Cellar there, so
-`brew upgrade` of the formula drops `ext/xymonapi`: run `make install`
-again after one. The task file and the settings live under `/opt/homebrew/etc`
-and survive.
+## MCP server
 
-For the MCP server below, the same Python needs `mcp-server/requirements.txt`
-and, for the two searches, `rag/requirements.txt`. Register it once, at user
-scope so every project has it, with the credentials and the man page
-directory the index reads:
+[`mcp-server/`](mcp-server) gives an AI client that speaks the Model Context
+Protocol -- Claude Desktop, Claude Code -- read-only tools over the API:
+`health`, `states`, `alarms`, `entities`, `series`, and the two searches of
+the next section, `search_docs` and `search_history`. It runs where the client
+runs, from this checkout, with the Python module in
+[`mcp-server/requirements.txt`](mcp-server/requirements.txt). For Claude Code,
+once, at user scope so every project has it:
 
 ```sh
 claude mcp add --scope user xymon \
   -e XYMONAPI_URL=http://127.0.0.1:1986 \
   -e XYMONAPI_USER=me -e XYMONAPI_PASSWORD=... \
-  -e XYMONAPI_PYTHON=/Users/me/.pyenv/versions/3.12.3/bin/python3 \
-  -e XYMONAPI_RAG_DOCS=/opt/homebrew/opt/xymon-server-preview/share/man \
+  -e XYMONAPI_PYTHON=/path/to/python3.12 \
+  -e XYMONAPI_RAG_DOCS=/usr/share/man \
   -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
 ```
 
-Then build the index with the same variables in the environment:
-`rag/xymonapi-rag.sh index` read 1874 passages from the man pages and
-30 days of history in about a minute, after a one-time 65 MB model download.
-Rerun it now and then: the history part is only as fresh as the last run.
-
-## MCP server
-
-[`mcp-server/`](mcp-server) gives an AI client that speaks the Model Context
-Protocol -- Claude Desktop, Claude Code -- read-only tools over the API:
-`health`, `states`, `alarms`, `entities`, `series`, and the two searches
-below, `search_docs` and `search_history`. It runs where the client
-runs, from this checkout, and needs the Python module in
-[`mcp-server/requirements.txt`](mcp-server/requirements.txt); the two
-searches also need those in [`rag/requirements.txt`](rag/requirements.txt)
-and an index built by `rag/xymonapi-rag.sh index`, and answer a tool error
-until then. For Claude Code:
-
-```sh
-claude mcp add xymon -e XYMONAPI_URL=https://xymon.example.com/ -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
-```
+Leave out the user and password when the API asks for none, and
+`XYMONAPI_PYTHON` when the system `python3` has the modules. The two searches
+answer a tool error until the index below is built.
 
 For an API on another machine, use HTTPS through a web server in front of
 it, as `xymonapi.8` says: over plain HTTP, a password crosses the network in
@@ -155,15 +132,22 @@ Every tool and setting is in
 
 ## Search
 
-[`rag/`](rag) searches Xymon's manual pages, read from the directory
-`XYMONAPI_RAG_DOCS` names, and its history through the API, by meaning:
-`xymonapi-rag.sh index` builds the index, `search` returns the
-passages nearest a question, and `ask` hands them to a language model that
-speaks the OpenAI-compatible API -- a local Ollama by default, so no key and no
-cost. The embeddings are computed on this machine. With a Claude subscription,
-the MCP tools above are the simpler way: Claude reads the passages and writes
-the answer. Every command and setting is in
-[`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
+[`rag/`](rag) searches Xymon's manual pages and its history by meaning. It
+needs the modules in [`rag/requirements.txt`](rag/requirements.txt) and the
+same `XYMONAPI_*` variables as above, plus `XYMONAPI_RAG_DOCS`, a directory
+with Xymon's manual pages. Build the index, then try it:
+
+```sh
+rag/xymonapi-rag.sh index
+rag/xymonapi-rag.sh search "what does purple mean"
+```
+
+The first run downloads a 65 MB embedding model; indexing takes about a
+minute. The index holds the last 30 days of history, so rerun `index` now and
+then, from cron or an xymonlaunch task. `ask` hands the passages to a
+language model speaking the OpenAI-compatible API, a local Ollama by default;
+with Claude, the MCP tools are the simpler way. Every command and setting is
+in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
 
 ## Tests
 
