@@ -27,7 +27,7 @@ make install XYMONHOME=/usr/lib/xymon/server
 
 | variable | meaning | default |
 |---|---|---|
-| `XYMONHOME` | the Xymon server directory, as `xymonserver.cfg` names it | none: required |
+| `XYMONHOME` | the Xymon server directory, as `xymonserver.cfg` names it | no default: it must be given |
 | `MANDIR` | where manual pages go | `/usr/share/man` |
 | `DESTDIR` | a staging directory put in front of every path, for a package | empty |
 
