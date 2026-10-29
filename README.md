@@ -25,19 +25,10 @@ operation, every setting, and how to enable it. The OpenAPI description is
 make install XYMONHOME=/usr/lib/xymon/server
 ```
 
-`XYMONHOME` is the server directory, as `xymonserver.cfg` names it. This puts
-the API in `$XYMONHOME/ext/xymonapi/` and a task in
-`$XYMONHOME/etc/tasks.d/xymonapi`, written `DISABLED`. To start it, remove
-that line; `xymonlaunch` then starts it once `xymond` runs. A later
-`make install` keeps the task file as you left it.
-
-It listens on `127.0.0.1:1986` unless `XYMONAPI_LISTEN` says otherwise, and
-answers anyone who reaches it unless `XYMONAPI_PASSWD` names an htpasswd file.
-Both go in a file under `xymonserver.d/`, beside `xymonserver.cfg`.
-
-```sh
-curl http://127.0.0.1:1986/xymon/api/v1/states
-```
+`XYMONHOME` is the server directory, as `xymonserver.cfg` names it; the
+`Makefile` says where each file goes. The API is installed disabled: how to
+enable it, where it listens, and how to require a password are in
+[`xymonapi.8`](xymonapi.8).
 
 ## Tests
 
