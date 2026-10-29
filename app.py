@@ -93,6 +93,24 @@ async def _graphs(request):
 # server answers one request at a time. That is enough for a read-only API on
 # the Xymon server itself; run them with starlette's run_in_threadpool if it
 # is ever not.
+async def _events(request):
+    q = request.query_params
+    try:
+        items = xymon.events(q.get("entity"), q.get("test"), q.get("since"), q.get("limit"))
+    except Exception as exc:                        # noqa: BLE001
+        return _refused(exc)
+    return JSONResponse({"items": items})
+
+
+async def _histlog(request):
+    q = request.query_params
+    try:
+        log = xymon.histlog(q.get("entity"), q.get("test"), q.get("time"))
+    except Exception as exc:                        # noqa: BLE001
+        return _refused(exc)
+    return JSONResponse(log)
+
+
 ROUTES = {
     "/health": _health,
     "/states": _states,
@@ -100,6 +118,8 @@ ROUTES = {
     "/entities": _entities,
     "/series": _series,
     "/graphs": _graphs,
+    "/events": _events,
+    "/histlog": _histlog,
 }
 
 

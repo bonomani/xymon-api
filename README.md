@@ -2,7 +2,8 @@
 
 A read-only HTTP and JSON interface to a [Xymon](https://github.com/xymon-monitoring/xymon)
 server: the status board, its alarms and hosts, the values in its RRD files,
-and the graphs drawn from them. It changes nothing in Xymon; it only reads.
+the graphs drawn from them, and the history of colour changes with the status
+text saved at each. It changes nothing in Xymon; it only reads.
 
 It is an add-on. It installs into an existing Xymon server, runs as one of its
 `xymonlaunch` tasks, and uses Xymon's own settings from `xymonserver.cfg`.

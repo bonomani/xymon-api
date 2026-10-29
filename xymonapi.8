@@ -7,7 +7,8 @@ xymonapi \- read-only HTTP and JSON interface to the Xymon server
 .SH DESCRIPTION
 xymonapi answers HTTP requests with what the Xymon server knows: the status
 board, the alarms on it, its hosts, the values in its RRD files and the
-graphs drawn from them. Answers are JSON, except for graphs, which are PNG.
+graphs drawn from them, and the history of colour changes with the status
+text saved at each. Answers are JSON, except for graphs, which are PNG.
 It changes nothing in Xymon: it only reads.
 
 It is optional, and shipped disabled. It is started by
@@ -52,6 +53,15 @@ The graph
 .I showgraph.cgi(1)
 draws for HOST and TEST, fetched from showgraph.sh, its wrapper, at
 $XYMONSERVERCGIURL.
+.IP "\fB/events\fR [\fBentity\fR=HOST] [\fBtest\fR=TEST] [\fBsince\fR=TIME] [\fBlimit\fR=N]"
+The colour changes xymond_history recorded in $XYMONHISTDIR/allevents, the
+newest first: when, the verdict before and after, and how long the one
+before had lasted. N is 1 to 1000, 100 by default. A server where nothing
+has changed colour yet has none.
+.IP "\fB/histlog\fR \fBentity\fR=HOST \fBtest\fR=TEST \fBtime\fR=SECONDS"
+The status text xymond_history saved under $XYMONHISTLOGS when HOST's TEST
+changed colour at that time, the epoch of an /events item; 404 when none was
+saved. At most 1 MiB of it.
 .LP
 A TIME is \fBnow\fR, seconds since the epoch, or a time relative to now such
 as \fB-30m\fR, \fB-24h\fR, \fB-7d\fR or \fB-2w\fR. \fBfrom\fR defaults to
@@ -69,6 +79,9 @@ The xymon client program.
 Where the RRD files are, for /series.
 .IP "\fBXYMONSERVERCGIURL\fR"
 Where showgraph.cgi is, for /graphs.
+.IP "\fBXYMONHISTDIR\fR, \fBXYMONHISTLOGS\fR"
+Where xymond_history keeps the events and the saved status texts, for
+/events and /histlog.
 .LP
 Three settings are its own. Put them in a file under
 \fBxymonserver.d/\fR beside xymonserver.cfg, which reads its files, for

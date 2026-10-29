@@ -6,8 +6,10 @@ the colour mapped to a verdict. Status-message bodies are not parsed.
 
 Everything about the server comes from Xymon's own settings, which the
 launcher gets from xymonserver.cfg: ``XYMON`` is the xymon client program,
-``XYMSRV`` the server to ask, ``XYMONRRDS`` where the RRD files are and
-``XYMONSERVERCGIURL`` where showgraph is.
+``XYMSRV`` the server to ask, ``XYMONRRDS`` where the RRD files are,
+``XYMONSERVERCGIURL`` where showgraph is, and ``XYMONHISTDIR`` and
+``XYMONHISTLOGS`` where xymond_history keeps the events and the saved status
+texts.
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ import re
 import subprocess
 import time
 import urllib.request
+from collections import deque
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
@@ -26,6 +29,8 @@ XYMON = os.environ.get("XYMON", "xymon")
 XYMSRV = os.environ.get("XYMSRV", "")
 XYMONRRDS = os.environ.get("XYMONRRDS", "")
 XYMONSERVERCGIURL = os.environ.get("XYMONSERVERCGIURL", "").rstrip("/")
+XYMONHISTDIR = os.environ.get("XYMONHISTDIR", "")
+XYMONHISTLOGS = os.environ.get("XYMONHISTLOGS", "")
 BOARD_FIELDS = ["hostname", "testname", "color", "lastchange"]
 
 # A name from the request becomes part of a file path and of an rrdtool
@@ -180,6 +185,67 @@ def graph(entity: str | None, test: str | None, frm: str, to: str) -> bytes:
                                 timeout=30) as r:
         return r.read()
 
+
+
+# --- History -------------------------------------------------------------------
+# xymond_history writes one line to $XYMONHISTDIR/allevents per colour change
+# -- "host test time prevtime prevduration newcolour oldcolour trend" -- and
+# saves the status text of each change as
+# $XYMONHISTLOGS/<host, dots as underscores>/<test>/<time>, the time in local
+# time as Fri_Nov_7_16:01:08_2002 (lib/timefunc.c, histlogtime()).
+_HISTLOG_MAX = 1024 * 1024
+
+
+def events(entity: str | None, test: str | None, since: str | None,
+           limit: str | None) -> list[dict]:
+    """The colour changes in allevents, the newest first."""
+    host = _name(entity, "entity") if entity else None
+    tst = _name(test, "test") if test else None
+    start = epoch(since) if since else 0
+    try:
+        n = int(limit) if limit else 100
+    except ValueError:
+        n = 0
+    if not 1 <= n <= 1000:
+        raise BadRequest("limit must be a number from 1 to 1000")
+    if not XYMONHISTDIR:
+        raise RuntimeError("XYMONHISTDIR is not set")
+    path = os.path.join(XYMONHISTDIR, "allevents")
+    if not os.path.isfile(path):
+        return []                       # nothing has changed colour yet
+    last: deque[list[str]] = deque(maxlen=n)
+    with open(path, encoding="utf-8",
+              errors="replace") as fd:
+        for line in fd:
+            f = line.split()
+            if len(f) < 7 or not f[2].isdigit() or int(f[2]) < start:
+                continue
+            if (host and f[0] != host) or (tst and f[1] != tst):
+                continue
+            last.append(f)
+    return [{"entity": f[0], "test": f[1], "time": _iso(f[2]), "epoch": int(f[2]),
+             "verdict": COLOUR_STATUS.get(f[5], "unknown"),
+             "previous": COLOUR_STATUS.get(f[6], "unknown"),
+             "previous_duration": int(f[4]) if f[4].isdigit() else None}
+            for f in reversed(last)]
+
+
+def histlog(entity: str | None, test: str | None, when: str | None) -> dict:
+    """The status text xymond_history saved when HOST's TEST changed colour
+    at WHEN, seconds since the epoch as /events gives it."""
+    host, tst = _name(entity, "entity"), _name(test, "test")
+    if not when or not when.isdigit():
+        raise BadRequest("time must be seconds since the epoch")
+    if not XYMONHISTLOGS:
+        raise RuntimeError("XYMONHISTLOGS is not set")
+    t = time.localtime(int(when))
+    name = time.strftime(f"%a_%b_{t.tm_mday}_%H:%M:%S_%Y", t)
+    path = os.path.join(XYMONHISTLOGS, host.replace(".", "_"), tst, name)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"no saved status for {host} {tst} at {when}")
+    with open(path, encoding="utf-8", errors="replace") as fd:
+        text = fd.read(_HISTLOG_MAX)
+    return {"entity": host, "test": tst, "time": _iso(when), "text": text}
 
 # --- HTTP Basic authentication -----------------------------------------------
 # The users are the web pages' own: the htpasswd file useradm and chpasswd

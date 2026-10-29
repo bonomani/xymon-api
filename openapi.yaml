@@ -126,6 +126,46 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "502": { $ref: "#/components/responses/Upstream" }
 
+  /events:
+    get:
+      summary: The colour changes xymond_history recorded, the newest first.
+      operationId: listEvents
+      parameters:
+        - { name: entity, in: query, schema: { type: string }, description: "Only this host." }
+        - { name: test,   in: query, schema: { type: string }, description: "Only this test." }
+        - { name: since,  in: query, schema: { $ref: "#/components/schemas/Time" }, description: "Only changes at or after this time." }
+        - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "200":
+          description: The changes; none when nothing has changed colour yet.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Event" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "502": { $ref: "#/components/responses/Upstream" }
+
+  /histlog:
+    get:
+      summary: The status text saved when a host's test changed colour.
+      operationId: getHistlog
+      parameters:
+        - { name: entity, in: query, required: true, schema: { type: string }, description: "The host." }
+        - { name: test,   in: query, required: true, schema: { type: string } }
+        - { name: time,   in: query, required: true, schema: { type: integer }, description: "The change, in seconds since the epoch: the epoch of an /events item." }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "200":
+          description: The saved status.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Histlog" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/Upstream" }
+
 components:
   securitySchemes:
     basicAuth:
@@ -207,6 +247,27 @@ components:
               t: { type: string, format: date-time }
               v: { type: number, nullable: true, description: "null where the RRD has no value." }
 
+    Event:
+      type: object
+      required: [entity, test, time, epoch, verdict, previous]
+      properties:
+        entity:   { type: string }
+        test:     { type: string }
+        time:     { type: string, format: date-time, description: "When the colour changed." }
+        epoch:    { type: integer, description: "The same, in seconds since the epoch: the time /histlog takes." }
+        verdict:  { $ref: "#/components/schemas/Status" }
+        previous: { $ref: "#/components/schemas/Status" }
+        previous_duration: { type: integer, nullable: true, description: "How long, in seconds, the previous verdict had lasted." }
+
+    Histlog:
+      type: object
+      required: [entity, test, time, text]
+      properties:
+        entity: { type: string }
+        test:   { type: string }
+        time:   { type: string, format: date-time }
+        text:   { type: string, description: "The status message as xymond received it, its first word the colour; at most 1 MiB." }
+
     Error:
       type: object
       required: [error]
@@ -222,7 +283,7 @@ components:
       description: A parameter that is not a Xymon name or a time.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     NotFound:
-      description: No RRD file for that host and test.
+      description: No RRD file, or no saved status, for that host, test and time.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     Upstream:
       description: xymond did not answer.
