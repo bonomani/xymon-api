@@ -77,8 +77,10 @@ Protocol -- Claude Desktop, Claude Code -- read-only tools over the API:
 `health`, `states`, `alarms`, `entities`, `series`, and the two searches
 below, `search_docs` and `search_history`. It runs where the client
 runs, from this checkout, and needs the Python module in
-[`mcp-server/requirements.txt`](mcp-server/requirements.txt). For Claude
-Code:
+[`mcp-server/requirements.txt`](mcp-server/requirements.txt); the two
+searches also need those in [`rag/requirements.txt`](rag/requirements.txt)
+and an index built by `rag/xymonapi-rag.sh index`, and answer a tool error
+until then. For Claude Code:
 
 ```sh
 claude mcp add xymon -e XYMONAPI_URL=https://xymon.example.com/ -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
@@ -104,8 +106,8 @@ the answer. Every command and setting is in
 
 ## Tests
 
-The tests run against a server build of Xymon's current `main`: one of them
-starts its `xymond`, and all of them use its test helpers, which no release
+The tests run against a server build of Xymon's current `main`: two of them
+start its `xymond`, and all of them use its test helpers, which no release
 has. `XYMON_SRC` names that tree, and is required: without it every test fails
 at once.
 
@@ -113,7 +115,11 @@ at once.
 XYMON_SRC=/path/to/built/xymon tests/run.sh
 ```
 
-They need `bash` and `curl`; some also need `rrdtool` or Apache's `htpasswd`.
+They need `bash`, `curl`, and the Python modules of all three
+`requirements.txt` -- the API's, `mcp-server/`'s and `rag/`'s -- for
+`python3`, or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool` or
+Apache's `htpasswd`. The
+search test downloads the embedding model, about 65 MB, the first time.
 A test skips (exit 77) when something it needs is missing, and says what. CI
 builds Xymon's `main` and runs them with nothing missing:
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
