@@ -69,6 +69,22 @@ the manual page:
 curl http://127.0.0.1:1986/xymon/api/v1/health
 ```
 
+## MCP server
+
+[`mcp-server/`](mcp-server) gives an AI client that speaks the Model Context
+Protocol -- Claude Desktop, Claude Code -- read-only tools over the API:
+`health`, `states`, `alarms`, `entities`, `series`. It runs where the client
+runs, from this checkout, and needs the Python module in
+[`mcp-server/requirements.txt`](mcp-server/requirements.txt). For Claude
+Code:
+
+```sh
+claude mcp add xymon -e XYMONAPI_URL=http://xymon.example.com:1986 -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
+```
+
+Every tool and setting is in
+[`mcp-server/xymonapi-mcp.1`](mcp-server/xymonapi-mcp.1).
+
 ## Tests
 
 The tests run against a server build of Xymon's current `main`: one of them

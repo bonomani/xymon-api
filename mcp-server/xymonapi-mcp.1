@@ -1,0 +1,47 @@
+.TH XYMONAPI-MCP 1 "October 29, 2026" "xymon-api"
+.SH NAME
+xymonapi-mcp \- MCP server for the Xymon API
+.SH SYNOPSIS
+.B "mcp-server/xymonapi-mcp.sh"
+
+.SH DESCRIPTION
+xymonapi-mcp gives an AI client that speaks the Model Context Protocol --
+Claude Desktop, Claude Code, and others -- tools to read a Xymon server. The
+client starts it and talks to it over stdin and stdout. Each tool is one
+request to a running
+.I xymonapi(8),
+so the client gets what the API answers at that moment: nothing is stored,
+and nothing in Xymon is changed. Every tool is marked read-only.
+
+It runs where the client runs, which need not be the Xymon server, and needs
+Python 3.10 or later with the module mcp (mcp-server/requirements.txt). When
+either is missing it says so on stderr and exits with status 77. It writes
+nothing but protocol messages on stdout.
+
+.SH TOOLS
+.IP "\fBhealth\fR"
+Whether xymond answers, and its version.
+.IP "\fBstates\fR [entity] [test] [verdict]"
+The status board, one state per host and test.
+.IP "\fBalarms\fR"
+Every state whose verdict is not ok.
+.IP "\fBentities\fR"
+Each host on the board, once.
+.IP "\fBseries\fR entity test [metric] [start] [end]"
+The values of one dataset of a host's RRD file over a time range.
+.LP
+Each answers what the xymonapi(8) operation of the same name answers; that
+page says what each field means. An API that cannot be reached, or that
+refuses a request, is a tool error whose text says which.
+
+.SH ENVIRONMENT
+.IP "\fBXYMONAPI_URL\fR"
+Where xymonapi(8) is. The default is http://127.0.0.1:1986.
+.IP "\fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR"
+The user and password sent when the API has XYMONAPI_PASSWD set.
+.IP "\fBXYMONAPI_PYTHON\fR"
+The Python to run with, the python3 of a virtualenv that holds mcp for
+instance. The default is python3, found on PATH.
+
+.SH "SEE ALSO"
+xymonapi(8)

@@ -40,7 +40,7 @@ jobs:
           # The system Python takes no pip installs (PEP 668); the launcher
           # uses whichever Python XYMONAPI_PYTHON names.
           python3 -m venv "$RUNNER_TEMP/venv"
-          "$RUNNER_TEMP/venv/bin/pip" install -r api/requirements.txt
+          "$RUNNER_TEMP/venv/bin/pip" install -r api/requirements.txt -r api/mcp-server/requirements.txt
 
       # The non-interactive configure recipe of Xymon's own build.yml.
       - name: Build Xymon
