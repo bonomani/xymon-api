@@ -10,6 +10,7 @@
 
 # XYMONAPI_PYTHON names the Python to use, a virtualenv's for instance.
 PYTHON=${XYMONAPI_PYTHON:-python3}
+here=`dirname "$0"`
 
 command -v "$PYTHON" >/dev/null 2>&1 || {
 	echo "xymonapi: $PYTHON not found; the API needs Python 3.10 or later" >&2
@@ -19,7 +20,9 @@ command -v "$PYTHON" >/dev/null 2>&1 || {
 	echo "xymonapi: `$PYTHON -V 2>&1` is too old; the API needs Python 3.10 or later" >&2
 	exit 77
 }
-missing=`"$PYTHON" -c 'import importlib.util as u
+# The module checks run from this script's directory: from the caller's, a
+# directory there named like a module would pass for it.
+missing=`cd "$here" && "$PYTHON" -c 'import importlib.util as u
 print(" ".join(m for m in ("fastapi", "uvicorn", "yaml") if u.find_spec(m) is None))'`
 if [ -n "$missing" ]; then
 	echo "xymonapi: missing Python modules: $missing (see requirements.txt)" >&2
@@ -36,5 +39,5 @@ listen=${XYMONAPI_LISTEN:-127.0.0.1:1986}
 port=${listen##*:}
 host=`echo "${listen%:*}" | sed -e 's/^\[//' -e 's/\]$//'`
 
-cd "`dirname "$0"`" || exit 1
+cd "$here" || exit 1
 exec "$PYTHON" -m uvicorn --host "$host" --port "$port" --no-access-log app:app

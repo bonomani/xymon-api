@@ -12,6 +12,7 @@
 # stdout carries the protocol and nothing else.
 
 PYTHON=${XYMONAPI_PYTHON:-python3}
+here=`dirname "$0"`
 
 command -v "$PYTHON" >/dev/null 2>&1 || {
 	echo "xymonapi-mcp: $PYTHON not found; it needs Python 3.10 or later" >&2
@@ -21,9 +22,11 @@ command -v "$PYTHON" >/dev/null 2>&1 || {
 	echo "xymonapi-mcp: `$PYTHON -V 2>&1` is too old; it needs Python 3.10 or later" >&2
 	exit 77
 }
-"$PYTHON" -c 'import importlib.util as u, sys; sys.exit(u.find_spec("mcp") is None)' || {
+# The module checks run from this script's directory: from the caller's, a
+# directory there named like a module would pass for it.
+(cd "$here" && "$PYTHON" -c 'import importlib.util as u, sys; sys.exit(u.find_spec("mcp") is None)') || {
 	echo "xymonapi-mcp: the Python module mcp is missing (see mcp-server/requirements.txt)" >&2
 	exit 77
 }
 
-exec "$PYTHON" "`dirname "$0"`/server.py"
+exec "$PYTHON" "$here/server.py"

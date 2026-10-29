@@ -81,10 +81,14 @@ def series(entity: str, test: str, metric: str | None = None,
                **{"from": start, "to": end})
 
 
+RAG = str(Path(__file__).resolve().parent.parent / "rag")
+
+
 def _search(question: str, kind: str, k: int) -> list[dict]:
     # rag/ only when a search is asked for: the other tools need neither
     # fastembed nor an index.
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "rag"))
+    if RAG not in sys.path:
+        sys.path.insert(0, RAG)
     try:
         import xymonrag
         return xymonrag.search(question, kind, max(1, min(k, 20)))
