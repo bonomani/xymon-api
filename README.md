@@ -14,7 +14,9 @@ operation, every setting, and how to enable it. The OpenAPI description is
 
 ## Requirements
 
-- A Xymon server.
+- A Xymon server built from Xymon's current `main` branch. The API's settings
+  go in `xymonserver.d/`, which no Xymon release reads yet: on 4.3.30 a file
+  there is ignored, and with it the password the API should ask for.
 - Python 3.10 or later, with the modules in [`requirements.txt`](requirements.txt).
 - `rrdtool`, for `/series`.
 - A web server running Xymon's `showgraph.cgi`, at `XYMONSERVERCGIURL`, for
@@ -65,8 +67,8 @@ set.
 
 ## Tests
 
-The tests start a real `xymond`, so they run against a built Xymon source
-tree, and use its test helpers:
+The tests start a real `xymond`, so they run against a server build of
+Xymon's current `main`, and use its test helpers, which no release has:
 
 ```sh
 XYMON_SRC=/path/to/built/xymon tests/run.sh
