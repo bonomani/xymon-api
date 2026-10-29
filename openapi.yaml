@@ -74,6 +74,47 @@ paths:
                   items: { type: array, items: { $ref: "#/components/schemas/Entity" } }
         "502": { $ref: "#/components/responses/Upstream" }
 
+  /series:
+    get:
+      summary: The values of one dataset of a host's RRD file over a time range.
+      operationId: listSeries
+      parameters:
+        - { name: entity, in: query, required: true, schema: { type: string }, description: "The host." }
+        - { name: test,   in: query, required: true, schema: { type: string }, description: "The RRD file, without .rrd: la, disk, tcp.http, ..." }
+        - { name: metric, in: query, schema: { type: string, default: lambda }, description: "The dataset in that file." }
+        - { name: from,   in: query, schema: { $ref: "#/components/schemas/Time" } }
+        - { name: to,     in: query, schema: { $ref: "#/components/schemas/Time" } }
+      responses:
+        "200":
+          description: The values, one per RRD step.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [series]
+                properties:
+                  series: { type: array, items: { $ref: "#/components/schemas/Series" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/Upstream" }
+
+  /graphs:
+    get:
+      summary: The graph showgraph draws for a host and test over a time range.
+      operationId: renderGraph
+      parameters:
+        - { name: entity, in: query, required: true, schema: { type: string }, description: "The host." }
+        - { name: test,   in: query, required: true, schema: { type: string }, description: "The graph, as showgraph names it." }
+        - { name: from,   in: query, schema: { $ref: "#/components/schemas/Time" } }
+        - { name: to,     in: query, schema: { $ref: "#/components/schemas/Time" } }
+      responses:
+        "200":
+          description: The graph.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "502": { $ref: "#/components/responses/Upstream" }
+
 components:
   schemas:
     Status:
@@ -129,6 +170,26 @@ components:
         composition: { type: string, enum: [measured] }
         labels:      { $ref: "#/components/schemas/Labels" }
 
+    Time:
+      type: string
+      description: "now, seconds since the epoch, or a time relative to now: -30m, -24h, -7d, -2w. from defaults to -24h, to to now."
+      pattern: "^(now|[0-9]+|-[0-9]+[smhdw])$"
+
+    Series:
+      type: object
+      required: [labels, points]
+      properties:
+        labels: { $ref: "#/components/schemas/Labels" }
+        metric: { type: string }
+        points:
+          type: array
+          items:
+            type: object
+            required: [t, v]
+            properties:
+              t: { type: string, format: date-time }
+              v: { type: number, nullable: true, description: "null where the RRD has no value." }
+
     Error:
       type: object
       required: [error]
@@ -137,6 +198,12 @@ components:
         detail: { type: string }
 
   responses:
+    BadRequest:
+      description: A parameter that is not a Xymon name or a time.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: No RRD file for that host and test.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     Upstream:
       description: xymond did not answer.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
