@@ -29,10 +29,18 @@ Every state whose verdict is not ok.
 Each host on the board, once.
 .IP "\fBseries\fR entity test [metric] [start] [end]"
 The values of one dataset of a host's RRD file over a time range.
+.IP "\fBsearch_docs\fR question [k]"
+The passages of Xymon's manual pages nearest the question, by meaning.
+.IP "\fBsearch_history\fR question [k]"
+The past colour changes nearest the question, with the status text saved at
+each.
 .LP
-Each answers what the xymonapi(8) operation of the same name answers; that
-page says what each field means. An API that cannot be reached, or that
-refuses a request, is a tool error whose text says which.
+The first five answer what the xymonapi(8) operation of the same name
+answers; that page says what each field means. The two searches are those of
+.I xymonapi-rag(1),
+in its index, and need its modules; the other tools do not. An API that
+cannot be reached, or that refuses a request, is a tool error whose text
+says which, as is a search with no index.
 
 .SH ENVIRONMENT
 .IP "\fBXYMONAPI_URL\fR"
@@ -42,6 +50,9 @@ The user and password sent when the API has XYMONAPI_PASSWD set.
 .IP "\fBXYMONAPI_PYTHON\fR"
 The Python to run with, the python3 of a virtualenv that holds mcp for
 instance. The default is python3, found on PATH.
+.LP
+The two searches also read the settings of xymonapi-rag(1), the index
+XYMONAPI_RAG_INDEX among them.
 
 .SH "SEE ALSO"
-xymonapi(8)
+xymonapi(8), xymonapi-rag(1)

@@ -1,0 +1,71 @@
+.TH XYMONAPI-RAG 1 "October 29, 2026" "xymon-api"
+.SH NAME
+xymonapi-rag \- search Xymon's manual pages and history by meaning
+.SH SYNOPSIS
+.B "rag/xymonapi-rag.sh index [--no-history]"
+.br
+.B "rag/xymonapi-rag.sh search [--kind docs|history] [-k N] QUESTION"
+.br
+.B "rag/xymonapi-rag.sh ask [-k N] QUESTION"
+
+.SH DESCRIPTION
+xymonapi-rag finds the passages of Xymon's manual pages, and of its history,
+that a question is about, by what they mean rather than by the words they
+share.
+.IP "\fBindex\fR"
+Reads the manual pages under $XYMONAPI_RAG_DOCS and, through
+.I xymonapi(8),
+the colour changes since $XYMONAPI_RAG_SINCE with the status text saved at
+each, at most 1000 of them; cuts them into passages, one per manual-page
+section or item and one per change; and stores a vector for each in
+$XYMONAPI_RAG_INDEX, replacing what was there. Run it again to take in what
+has changed since -- an xymonlaunch task with an INTERVAL does that.
+\fB--no-history\fR reads the manual pages only.
+.IP "\fBsearch\fR"
+Prints, as JSON, the N passages nearest QUESTION (5 by default), each with
+its kind, the page, section and item or the host, test and time it comes
+from, and its score. \fB--kind\fR keeps to manual pages or history.
+.IP "\fBask\fR"
+Gives the N passages nearest QUESTION, and the question, to a language model
+that speaks the OpenAI-compatible API, and prints its answer.
+.LP
+The vectors come from a small embedding model, run on this machine by the
+Python module fastembed; it is downloaded once, about 65 MB, the first time
+it is used. Indexing and searching send nothing elsewhere. Only ask does,
+and only to $XYMONAPI_RAG_LLM_URL.
+
+The same search is offered to an AI client by the search_docs and
+search_history tools of
+.I xymonapi-mcp(1),
+whose own model then writes the answer: with a Claude subscription, ask is
+not needed.
+
+It needs Python 3.10 or later with the modules in rag/requirements.txt; when
+one is missing it says so and exits with status 77.
+
+.SH ENVIRONMENT
+.IP "\fBXYMONAPI_RAG_DOCS\fR"
+A directory searched for manual pages: files ending in .1, .5, .7 or .8,
+gzipped or not, as in a Xymon source tree or under /usr/share/man.
+.IP "\fBXYMONAPI_RAG_INDEX\fR"
+The index file. The default is ~/.cache/xymonapi-rag/index.npz.
+.IP "\fBXYMONAPI_RAG_SINCE\fR"
+How far back index reads the history, as a time /events takes: -30d by
+default.
+.IP "\fBXYMONAPI_RAG_MODEL\fR"
+The embedding model, BAAI/bge-small-en-v1.5 by default. An index must be
+searched with the model that built it.
+.IP "\fBXYMONAPI_RAG_LLM_URL\fR"
+The OpenAI-compatible API ask uses. The default,
+http://127.0.0.1:11434/v1, is a local Ollama: no key, no cost.
+.IP "\fBXYMONAPI_RAG_LLM_MODEL\fR"
+The model ask names, llama3.1 by default.
+.IP "\fBXYMONAPI_RAG_LLM_KEY\fR"
+Sent as a bearer token when set, for a hosted model that needs a key.
+.IP "\fBXYMONAPI_URL\fR, \fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR"
+Where the API is, and the user to send it, as for xymonapi-mcp(1).
+.IP "\fBXYMONAPI_PYTHON\fR"
+The Python to run with. The default is python3, found on PATH.
+
+.SH "SEE ALSO"
+xymonapi(8), xymonapi-mcp(1)

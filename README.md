@@ -74,7 +74,8 @@ curl http://127.0.0.1:1986/xymon/api/v1/health
 
 [`mcp-server/`](mcp-server) gives an AI client that speaks the Model Context
 Protocol -- Claude Desktop, Claude Code -- read-only tools over the API:
-`health`, `states`, `alarms`, `entities`, `series`. It runs where the client
+`health`, `states`, `alarms`, `entities`, `series`, and the two searches
+below, `search_docs` and `search_history`. It runs where the client
 runs, from this checkout, and needs the Python module in
 [`mcp-server/requirements.txt`](mcp-server/requirements.txt). For Claude
 Code:
@@ -85,6 +86,17 @@ claude mcp add xymon -e XYMONAPI_URL=http://xymon.example.com:1986 -- /path/to/x
 
 Every tool and setting is in
 [`mcp-server/xymonapi-mcp.1`](mcp-server/xymonapi-mcp.1).
+
+## Search
+
+[`rag/`](rag) searches Xymon's manual pages, and its history through the API,
+by meaning: `xymonapi-rag.sh index` builds the index, `search` returns the
+passages nearest a question, and `ask` hands them to a language model that
+speaks the OpenAI-compatible API -- a local Ollama by default, so no key and no
+cost. The embeddings are computed on this machine. With a Claude subscription,
+the MCP tools above are the simpler way: Claude reads the passages and writes
+the answer. Every command and setting is in
+[`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
 
 ## Tests
 

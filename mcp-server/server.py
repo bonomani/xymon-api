@@ -10,6 +10,9 @@ Where the API is, and the user to send it, are client.py's settings.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -21,7 +24,8 @@ READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
 server = MCPServer(
     name="xymon",
     instructions="Read a Xymon monitoring server: its status board, alarms, "
-                 "hosts and the numeric history in its RRD files. Read-only.")
+                 "hosts and the numeric history in its RRD files, and search "
+                 "its manual pages and its past colour changes. Read-only.")
 
 
 def api(path: str, **params: str | None) -> dict:
@@ -75,6 +79,35 @@ def series(entity: str, test: str, metric: str | None = None,
     """
     return api("/series", entity=entity, test=test, metric=metric,
                **{"from": start, "to": end})
+
+
+def _search(question: str, kind: str, k: int) -> list[dict]:
+    # rag/ only when a search is asked for: the other tools need neither
+    # fastembed nor an index.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "rag"))
+    try:
+        import xymonrag
+        return xymonrag.search(question, kind, max(1, min(k, 20)))
+    except ImportError as e:
+        raise ToolError(f"searching needs the modules in rag/requirements.txt: {e}") from e
+    except FileNotFoundError as e:
+        raise ToolError(str(e)) from e
+
+
+@server.tool(annotations=READ_ONLY)
+def search_docs(question: str, k: int = 5) -> list[dict]:
+    """The passages of Xymon's manual pages nearest a question, by meaning:
+    how to configure something, what a setting or a column does. Each says
+    which page, section and item it comes from."""
+    return _search(question, "docs", k)
+
+
+@server.tool(annotations=READ_ONLY)
+def search_history(question: str, k: int = 5) -> list[dict]:
+    """The past colour changes nearest a question, by meaning, each with the
+    status text saved when it happened: has this error been seen before, on
+    which host, and when. Only what the last indexing read is found."""
+    return _search(question, "history", k)
 
 
 if __name__ == "__main__":

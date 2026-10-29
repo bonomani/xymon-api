@@ -5,7 +5,7 @@
 #
 # The MCP server answers an MCP client with what the API answers: a red status
 # sent to a real xymond comes back from the states tool as critical, through
-# the API. It lists the five tools, all read-only; it reports an API it cannot
+# the API. It lists the seven tools, all read-only; it reports an API it cannot
 # reach as a tool error the client can read, not as a crash; and it writes
 # nothing but protocol messages on stdout.
 #
@@ -60,10 +60,10 @@ mcp "http://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/list"}
 [ "$rc" -eq 77 ] && skip "$(cat "$work/mcp.err")"
 [ "$rc" -eq 0 ] || fail "the MCP server exited with $rc: $(tail -n 5 "$work/mcp.err")"
 list=$(grep '"id":3' "$work/mcp.out") || fail "no answer to tools/list: $(tail -n 5 "$work/mcp.err")"
-for tool in health states alarms entities series; do
+for tool in health states alarms entities series search_docs search_history; do
 	assert_contains "\"name\":\"$tool\"" "$list" "tools/list names $tool"
 done
-assert_equal "5" "$(printf '%s' "$list" | grep -o '"readOnlyHint":true' | wc -l | tr -d ' ')" "every tool is marked read-only"
+assert_equal "7" "$(printf '%s' "$list" | grep -o '"readOnlyHint":true' | wc -l | tr -d ' ')" "every tool is marked read-only"
 
 mcp "http://127.0.0.1:$API_PORT" \
 	'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"states","arguments":{"entity":"red.example.com","test":"conn"}}}' \
