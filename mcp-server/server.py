@@ -94,7 +94,7 @@ def _search(question: str, kind: str, k: int) -> list[dict]:
         return xymonrag.search(question, kind, max(1, min(k, 20)))
     except ImportError as e:
         raise ToolError(f"searching needs the modules in rag/requirements.txt: {e}") from e
-    except FileNotFoundError as e:
+    except xymonrag.IndexProblem as e:
         raise ToolError(str(e)) from e
 
 

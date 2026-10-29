@@ -20,7 +20,12 @@ PASSWORD = os.environ.get("XYMONAPI_PASSWORD", "")
 
 
 class APIError(RuntimeError):
-    """The API could not be reached, or refused the request; the text says which."""
+    """The API could not be reached, or refused the request; the text says which.
+    status is the HTTP status of a refusal, None when there was no answer."""
+
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -49,7 +54,8 @@ def api(path: str, **params: str | None) -> dict:
             return json.load(r)
     except urllib.error.HTTPError as e:
         # The API's own explanation, not a bare status.
-        raise APIError(f"xymonapi answered {e.code}: {e.read().decode(errors='replace')}") from e
+        raise APIError(f"xymonapi answered {e.code}: {e.read().decode(errors='replace')}",
+                       e.code) from e
     except urllib.error.URLError as e:
         raise APIError(f"cannot reach xymonapi at {URL}: {e.reason}") from e
     except ValueError as e:              # a URL urllib cannot use, or an answer that is not JSON
