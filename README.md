@@ -173,7 +173,8 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 They need `bash`, `curl`, and the Python modules of all three
 `requirements.txt` -- the API's, `mcp-server/`'s and `rag/`'s -- for `python3`,
 or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool` or Apache's
-`htpasswd`. The search test downloads the embedding model, about 65 MB, the
+`htpasswd`. The web server and the language model are stand-ins under
+`tests/lib/`; the embedding model is the real one. The search test downloads the embedding model, about 65 MB, the
 first time. A test skips (exit 77) when something it needs is missing, and says
 what. CI builds Xymon's `main` and runs them with nothing missing:
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
