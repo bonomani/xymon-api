@@ -89,7 +89,7 @@ paths:
       operationId: listSeries
       parameters:
         - { name: entity, in: query, required: true, schema: { type: string }, description: "The host." }
-        - { name: test,   in: query, required: true, schema: { type: string }, description: "The RRD file, without .rrd: la, disk, tcp.http, ..." }
+        - { name: test,   in: query, required: true, schema: { type: string }, description: "The RRD file, without .rrd, named after the data, not the board column: la (cpu load), memory, tcp.conn, tcp.ssh, tcp.http, disk,<mount>..." }
         - { name: metric, in: query, schema: { type: string, default: lambda }, description: "The dataset in that file." }
         - { name: from,   in: query, schema: { $ref: "#/components/schemas/Time" } }
         - { name: to,     in: query, schema: { $ref: "#/components/schemas/Time" } }

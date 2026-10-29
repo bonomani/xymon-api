@@ -47,7 +47,14 @@ Every state whose verdict is not ok.
 Each host on the board, once.
 .IP "\fB/series\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBmetric\fR=DATASET] [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
 The values of one dataset of the RRD file TEST.rrd of HOST, under
-$XYMONRRDS, read with rrdtool. DATASET defaults to lambda.
+$XYMONRRDS, read with rrdtool. TEST is the file's name, not the column on
+the status board: xymond_rrd names the files after the data it keeps, so
+the conn test is in tcp.conn.rrd and the ssh test in tcp.ssh.rrd, cpu load
+is in la.rrd and memory in memory.rrd, and a disk is in disk,<mount with
+commas for slashes>.rrd. DATASET is a column in that file: lambda is the
+load average in la.rrd, sec the response time in a tcp.*.rrd. DATASET
+defaults to lambda, and a missing file or dataset is answered 404. To see
+what a host has, list $XYMONRRDS/HOST/ there, or run rrdtool info on a file.
 .IP "\fB/graphs\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
 The graph
 .I showgraph.cgi(1)
