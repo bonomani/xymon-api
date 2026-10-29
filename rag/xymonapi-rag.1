@@ -19,7 +19,9 @@ the colour changes since $XYMONAPI_RAG_SINCE with the status text saved at
 each, at most 1000 of them; cuts them into passages, one per manual-page
 section or item and one per change; and stores a vector for each in
 $XYMONAPI_RAG_INDEX, replacing what was there. Run it again to take in what
-has changed since -- an xymonlaunch task with an INTERVAL does that.
+has changed since -- an xymonlaunch task with an INTERVAL does that. When
+the history cannot be read -- a /histlog refused for another reason than a
+status that was not saved -- it stops and leaves the index as it was.
 \fB--no-history\fR reads the manual pages only.
 .IP "\fBsearch\fR"
 Prints, as JSON, the N passages nearest QUESTION (5 by default), each with
@@ -43,18 +45,29 @@ not needed.
 It needs Python 3.10 or later with the modules in rag/requirements.txt; when
 one is missing it says so and exits with status 77.
 
+.SH SECURITY
+A history passage holds a status text, which the monitored host wrote: a
+host that is broken into can write there words meant to steer a language
+model. Each such passage carries a "trust" field saying it is data, not
+instructions, and ask tells the model so; a model may still be misled. Give
+ask, and an AI client that uses search_history, no more than read access,
+as the tools of xymonapi-mcp(1) have.
+
 .SH ENVIRONMENT
 .IP "\fBXYMONAPI_RAG_DOCS\fR"
 A directory searched for manual pages: files ending in .1, .5, .7 or .8,
-gzipped or not, as in a Xymon source tree or under /usr/share/man.
+gzipped or not, as in a Xymon source tree or under /usr/share/man. Only
+Xymon's pages are indexed -- those whose .TH line names Xymon -- so other
+programs' pages, and any other file there, are left out.
 .IP "\fBXYMONAPI_RAG_INDEX\fR"
 The index file. The default is ~/.cache/xymonapi-rag/index.npz.
 .IP "\fBXYMONAPI_RAG_SINCE\fR"
 How far back index reads the history, as a time /events takes: -30d by
 default.
 .IP "\fBXYMONAPI_RAG_MODEL\fR"
-The embedding model, BAAI/bge-small-en-v1.5 by default. An index must be
-searched with the model that built it.
+The embedding model, BAAI/bge-small-en-v1.5 by default. The index records
+the model that built it, and a search with another is refused: run index
+again after changing it.
 .IP "\fBXYMONAPI_RAG_LLM_URL\fR"
 The OpenAI-compatible API ask uses. The default,
 http://127.0.0.1:11434/v1, is a local Ollama: no key, no cost.

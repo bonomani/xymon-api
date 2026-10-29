@@ -42,6 +42,18 @@ in its index, and need its modules; the other tools do not. An API that
 cannot be reached, or that refuses a request, is a tool error whose text
 says which, as is a search with no index.
 
+.SH SECURITY
+search_history returns status texts that the monitored hosts wrote, each
+marked as data, not instructions; a host that is broken into can still write
+there words meant to steer the client's model. Every tool here only reads,
+but an AI client that also has tools that change things should be watched
+when it acts on a history it found.
+
+The user and password are sent in the clear over http://. To reach an API
+on another machine, put it behind a web server that speaks HTTPS, as
+xymonapi(8) says, and give an https:// XYMONAPI_URL. Redirects are not
+followed, so the credentials go to XYMONAPI_URL and nowhere else.
+
 .SH ENVIRONMENT
 .IP "\fBXYMONAPI_URL\fR"
 Where xymonapi(8) is. The default is http://127.0.0.1:1986.

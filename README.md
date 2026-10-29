@@ -81,8 +81,12 @@ runs, from this checkout, and needs the Python module in
 Code:
 
 ```sh
-claude mcp add xymon -e XYMONAPI_URL=http://xymon.example.com:1986 -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
+claude mcp add xymon -e XYMONAPI_URL=https://xymon.example.com/ -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
 ```
+
+For an API on another machine, use HTTPS through a web server in front of
+it, as `xymonapi.8` says: over plain HTTP, a password crosses the network in
+the clear.
 
 Every tool and setting is in
 [`mcp-server/xymonapi-mcp.1`](mcp-server/xymonapi-mcp.1).
