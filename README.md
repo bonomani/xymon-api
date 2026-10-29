@@ -53,11 +53,15 @@ that. If they go in a virtualenv, because the system Python refuses them,
 
 The API is installed disabled: how to enable it, where it listens, and how to
 require a password are in [`xymonapi.8`](xymonapi.8). Once it runs, with the
-default address, this should answer `{"alive":true,...}`:
+default address, this checks it:
 
 ```sh
 curl http://127.0.0.1:1986/xymon/api/v1/health
 ```
+
+It answers `{"alive":true,...}` while xymond runs, `{"alive":false}` if xymond
+does not answer, and 401 without `-u user:password` when a password file is
+set.
 
 ## Tests
 
