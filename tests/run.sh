@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: GPL-2.0-or-later
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # tests/run.sh -- run every test under tests/api/, against the built Xymon
 # source tree named by XYMON_SRC.
