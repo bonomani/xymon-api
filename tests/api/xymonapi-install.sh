@@ -28,7 +28,9 @@ rc=0
 assert_contains "XYMONHOME" "$(cat "$work/nohome.log")" "and it says what is missing"
 [ -e "$work/man" ] && fail "make install without XYMONHOME installed something"
 
-"$make" -C "$ROOT" install XYMONHOME="$home" MANDIR="$work/man" >"$work/install.log" 2>&1 \
+# Under a umask that would leave a new file readable by its owner alone: the
+# task file must still be 644, like the others, whoever xymonlaunch runs as.
+( umask 077 && "$make" -C "$ROOT" install XYMONHOME="$home" MANDIR="$work/man" ) >"$work/install.log" 2>&1 \
 	|| fail "make install failed: $(tail -n 5 "$work/install.log")"
 
 for f in app.py xymon.py openapi.yaml requirements.txt xymonapi.sh; do
@@ -43,6 +45,8 @@ grep -q '^[[:space:]]*DISABLED$' "$task" || fail "the task is not shipped DISABL
 grep -q "^[[:space:]]*ENVFILE $home/etc/xymonserver.cfg\$" "$task" \
 	|| fail "ENVFILE does not name this server's xymonserver.cfg: $(grep ENVFILE "$task")"
 grep -q '@XYMONHOME@' "$task" && fail "@XYMONHOME@ was left unreplaced in $task"
+mode=$(ls -l "$task" | cut -c1-10)
+assert_equal "-rw-r--r--" "$mode" "the task file's mode under umask 077"
 
 # The admin enables the API, and the next install must not undo it.
 grep -v '^[[:space:]]*DISABLED$' "$task" > "$work/enabled"

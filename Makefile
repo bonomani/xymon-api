@@ -32,6 +32,7 @@ install:
 		echo "keeping $(TASKDIR)/xymonapi"; \
 	else \
 		sed -e 's!@XYMONHOME@!$(XYMONHOME)!g' xymonapi.tasks.DIST > $(TASKDIR)/xymonapi; \
+		chmod 644 $(TASKDIR)/xymonapi; \
 	fi
 
 .PHONY: all install
