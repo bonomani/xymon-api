@@ -47,7 +47,7 @@ start_api() {
 				grep -q 'address already in use' "$work/api.log" && continue 2
 				fail "the API exited with $rc: $(tail -n 5 "$work/api.log")"
 			fi
-			curl -s -o /dev/null "http://127.0.0.1:$API_PORT/xymon/api/v1/health" && return 0
+			curl -s --max-time 5 -o /dev/null "http://127.0.0.1:$API_PORT/xymon/api/v1/health" && return 0
 			sleep 0.2
 		done
 		fail "the API did not answer within 60 seconds: $(tail -n 5 "$work/api.log")"
@@ -57,12 +57,12 @@ start_api() {
 
 # api_get PATH -- the body the API answers for PATH, under /xymon/api/v1.
 api_get() {
-	curl -s "http://127.0.0.1:$API_PORT/xymon/api/v1$1"
+	curl -s --max-time 30 "http://127.0.0.1:$API_PORT/xymon/api/v1$1"
 }
 
 # api_code PATH -- the HTTP status the API answers for PATH.
 api_code() {
-	curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT/xymon/api/v1$1"
+	curl -s --max-time 30 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT/xymon/api/v1$1"
 }
 
 # mcp URL REQUEST... -- run the MCP server for the API at URL, send it the

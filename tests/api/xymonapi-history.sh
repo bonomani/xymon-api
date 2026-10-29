@@ -10,7 +10,9 @@
 # with its dots as underscores, then the test, then the local time as
 # Tue_Nov_7_23:33:20_2023 -- no leading zero on the day, which the time here
 # is chosen to show. Names that could leave those directories, and a time or
-# limit the API cannot read, are 400.
+# limit the API cannot read, are 400; an XYMONHISTDIR that is not a directory
+# is 502, not an empty history. At most 1 MiB of a saved status is returned,
+# counted in bytes.
 #
 # The files are written here, in xymond_history's format, and the API runs in
 # UTC so the saved file's name is known. Skips where the API cannot run
@@ -49,6 +51,12 @@ assert_contains '"epoch":1699400600' "$first" "the newest change comes first"
 assert_contains '"verdict":"ok","previous":"critical","previous_duration":600' "$first" "with its verdicts and how long the previous one lasted"
 assert_equal "3" "$(printf '%s' "$all" | grep -o '"epoch":' | wc -l | tr -d ' ')" "/events returns every change"
 
+# Filtered, then cut: the newest db.example.com change is not the newest one.
+db=$(api_get '/events?entity=db.example.com&limit=1')
+assert_contains '"entity":"db.example.com","test":"conn"' "$db" "entity= keeps that host's changes"
+assert_contains '"epoch":1699400300' "$db" "and limit applies after the filter"
+assert_equal '{"items":[]}' "$(api_get '/events?test=nosuchtest')" "test= with no change of that test"
+
 one=$(api_get '/events?entity=web.example.com&test=http&limit=1')
 assert_equal "1" "$(printf '%s' "$one" | grep -o '"epoch":' | wc -l | tr -d ' ')" "limit=1"
 assert_contains '"epoch":1699400600' "$one" "keeps the newest"
@@ -66,11 +74,30 @@ assert_equal "400" "$(api_code '/histlog?entity=web.example.com&test=http&time=y
 assert_equal "400" "$(api_code '/events?entity=..&test=http')" "/events, a host name of .."
 assert_equal "400" "$(api_code '/events?limit=0')" "/events, limit 0"
 assert_equal "400" "$(api_code '/events?limit=1001')" "/events, a limit above 1000"
+# A digit int() refuses, and a time too large for the calendar.
+assert_equal "400" "$(api_code '/events?since=%C2%B2')" "/events, since=² (a digit, not 0-9)"
+assert_equal "400" "$(api_code '/histlog?entity=web.example.com&test=http&time=%C2%B2')" "/histlog, time=²"
+assert_equal "400" "$(api_code '/histlog?entity=web.example.com&test=http&time=99999999999999999999')" "/histlog, a time out of range"
+
+# The 1 MiB limit is on bytes: 600000 two-byte characters are 1.2 MB on disk,
+# and what comes back must hold about 1 MiB of them, not all.
+awk 'BEGIN { printf "red "; for (i = 0; i < 600000; i++) printf "\303\251" }' \
+	> "$work/histlogs/web_example_com/http/Tue_Nov_7_23:43:20_2023"
+curl -s --max-time 30 -o "$work/big.json" "http://127.0.0.1:$API_PORT/xymon/api/v1/histlog?entity=web.example.com&test=http&time=1699400600"
+size=$(wc -c < "$work/big.json" | tr -d ' ')
+[ "$size" -gt 1000000 ] && [ "$size" -lt 1100000 ] \
+	|| fail "a saved status of 1.2 MB came back as $size bytes, not about 1 MiB"
 
 # A server where nothing has changed colour yet has no allevents.
 stop_process "$API_PID"
 API_PID=""
 XYMONHISTDIR="$work/empty" start_api
 assert_equal '{"items":[]}' "$(api_get /events)" "no allevents: no events, not an error"
+
+# But a directory that is not there is a wrong setting, not an empty history.
+stop_process "$API_PID"
+API_PID=""
+XYMONHISTDIR="$work/no-such-dir" start_api
+assert_equal "502" "$(api_code /events)" "XYMONHISTDIR naming no directory"
 
 pass "/events reads allevents newest first and filtered, /histlog finds the saved status by xymond_history's name, and bad names are refused"

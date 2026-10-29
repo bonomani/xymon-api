@@ -39,6 +39,8 @@ BOARD_FIELDS = ["hostname", "testname", "color", "lastchange"]
 _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.,-]*")
 _DSNAME = re.compile(r"[A-Za-z0-9_]{1,19}")
 _RELATIVE = re.compile(r"-([0-9]+)([smhdw])")
+# [0-9], not str.isdigit(), which also takes "²" -- which int() then refuses.
+_DIGITS = re.compile(r"[0-9]+")
 _UNIT = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
@@ -138,7 +140,7 @@ def epoch(value: str, now: int | None = None) -> int:
     now = int(time.time()) if now is None else now
     if value == "now":
         return now
-    if value.isdigit():
+    if _DIGITS.fullmatch(value):
         return int(value)
     m = _RELATIVE.fullmatch(value)
     if m:
@@ -210,6 +212,10 @@ def events(entity: str | None, test: str | None, since: str | None,
         raise BadRequest("limit must be a number from 1 to 1000")
     if not XYMONHISTDIR:
         raise RuntimeError("XYMONHISTDIR is not set")
+    # The directory must be there; only allevents may not be yet. A missing
+    # directory is a wrong setting, and an empty history would hide it.
+    if not os.path.isdir(XYMONHISTDIR):
+        raise RuntimeError(f"XYMONHISTDIR={XYMONHISTDIR} is not a directory")
     path = os.path.join(XYMONHISTDIR, "allevents")
     if not os.path.isfile(path):
         return []                       # nothing has changed colour yet
@@ -218,7 +224,7 @@ def events(entity: str | None, test: str | None, since: str | None,
               errors="replace") as fd:
         for line in fd:
             f = line.split()
-            if len(f) < 7 or not f[2].isdigit() or int(f[2]) < start:
+            if len(f) < 7 or not _DIGITS.fullmatch(f[2]) or int(f[2]) < start:
                 continue
             if (host and f[0] != host) or (tst and f[1] != tst):
                 continue
@@ -226,7 +232,7 @@ def events(entity: str | None, test: str | None, since: str | None,
     return [{"entity": f[0], "test": f[1], "time": _iso(f[2]), "epoch": int(f[2]),
              "verdict": COLOUR_STATUS.get(f[5], "unknown"),
              "previous": COLOUR_STATUS.get(f[6], "unknown"),
-             "previous_duration": int(f[4]) if f[4].isdigit() else None}
+             "previous_duration": int(f[4]) if _DIGITS.fullmatch(f[4]) else None}
             for f in reversed(last)]
 
 
@@ -234,17 +240,22 @@ def histlog(entity: str | None, test: str | None, when: str | None) -> dict:
     """The status text xymond_history saved when HOST's TEST changed colour
     at WHEN, seconds since the epoch as /events gives it."""
     host, tst = _name(entity, "entity"), _name(test, "test")
-    if not when or not when.isdigit():
+    if not when or not _DIGITS.fullmatch(when):
         raise BadRequest("time must be seconds since the epoch")
     if not XYMONHISTLOGS:
         raise RuntimeError("XYMONHISTLOGS is not set")
-    t = time.localtime(int(when))
+    try:
+        t = time.localtime(int(when))
+    except (OverflowError, OSError, ValueError) as e:
+        raise BadRequest(f"time {when} is out of range") from e
     name = time.strftime(f"%a_%b_{t.tm_mday}_%H:%M:%S_%Y", t)
     path = os.path.join(XYMONHISTLOGS, host.replace(".", "_"), tst, name)
     if not os.path.isfile(path):
         raise FileNotFoundError(f"no saved status for {host} {tst} at {when}")
-    with open(path, encoding="utf-8", errors="replace") as fd:
-        text = fd.read(_HISTLOG_MAX)
+    # Bytes, then text: the limit is on what is read from disk, 1 MiB, not on
+    # characters, of which 1 MiB could be four times as much.
+    with open(path, "rb") as fd:
+        text = fd.read(_HISTLOG_MAX).decode("utf-8", errors="replace")
     return {"entity": host, "test": tst, "time": _iso(when), "text": text}
 
 # --- HTTP Basic authentication -----------------------------------------------
