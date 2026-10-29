@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: Xymon API
+  version: 1.0.0
+  description: >
+    A read-only HTTP and JSON view of a Xymon server: the status board, its
+    alarms and its hosts. A verdict is never a colour; the colour is how the
+    web pages show it. See xymonapi(8).
+  license:
+    name: GPL-2.0-only
+
+servers:
+  - url: /xymon/api/v1
+
+paths:
+  /health:
+    get:
+      summary: Whether xymond answers, and its version.
+      operationId: health
+      responses:
+        "200":
+          description: The answer; alive is false when xymond does not answer.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } }
+
+  /states:
+    get:
+      summary: The status board, one state per host and test.
+      operationId: listStates
+      parameters:
+        - { name: entity,  in: query, schema: { type: string }, description: "Only this host." }
+        - { name: test,    in: query, schema: { type: string }, description: "Only this test." }
+        - { name: verdict, in: query, schema: { $ref: "#/components/schemas/Status" } }
+      responses:
+        "200":
+          description: The matching states.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/State" } }
+        "502": { $ref: "#/components/responses/Upstream" }
+
+  /alarms:
+    get:
+      summary: Every state that is not ok.
+      operationId: listAlarms
+      responses:
+        "200":
+          description: The alarms.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Alarm" } }
+        "502": { $ref: "#/components/responses/Upstream" }
+
+  /entities:
+    get:
+      summary: Each host on the board, once.
+      operationId: listEntities
+      responses:
+        "200":
+          description: The hosts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Entity" } }
+        "502": { $ref: "#/components/responses/Upstream" }
+
+components:
+  schemas:
+    Status:
+      type: string
+      description: >
+        The verdict. The web pages show ok as green, warning as yellow,
+        critical as red, disabled as blue, nodata as clear and unknown as
+        purple.
+      enum: [ok, warning, critical, disabled, nodata, unknown]
+
+    Severity:
+      type: string
+      description: red is major, purple critical, yellow and anything else minor.
+      enum: [minor, major, critical]
+
+    Labels:
+      type: object
+      additionalProperties: { type: string }
+
+    Health:
+      type: object
+      required: [alive]
+      properties:
+        alive: { type: boolean }
+        server_version: { type: string, description: "xymond's answer to a ping, e.g. \"xymond 4.3.30\"." }
+
+    State:
+      type: object
+      required: [id, entity, test, verdict]
+      properties:
+        id:      { type: string, description: "host:test" }
+        entity:  { type: string, description: "The host." }
+        test:    { type: string }
+        verdict: { $ref: "#/components/schemas/Status" }
+        time:    { type: string, format: date-time, description: "When the verdict last changed." }
+
+    Alarm:
+      type: object
+      required: [id, severity, status]
+      properties:
+        id:       { type: string, description: "host:test" }
+        entity:   { type: string }
+        test:     { type: string }
+        severity: { $ref: "#/components/schemas/Severity" }
+        status:   { type: string, enum: [firing] }
+        since:    { type: string, format: date-time }
+
+    Entity:
+      type: object
+      required: [id, composition]
+      properties:
+        id:          { type: string, description: "The host name." }
+        composition: { type: string, enum: [measured] }
+        labels:      { $ref: "#/components/schemas/Labels" }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:  { type: string }
+        detail: { type: string }
+
+  responses:
+    Upstream:
+      description: xymond did not answer.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
