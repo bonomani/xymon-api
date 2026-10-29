@@ -10,6 +10,8 @@ launcher gets from xymonserver.cfg: ``XYMON`` is the xymon client program,
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -176,3 +178,39 @@ def graph(entity: str | None, test: str | None, frm: str, to: str) -> bytes:
     with urllib.request.urlopen(f"{XYMONSERVERCGIURL}/showgraph.sh?{q}",
                                 timeout=30) as r:
         return r.read()
+
+
+# --- HTTP Basic authentication -----------------------------------------------
+# The users are the web pages' own: the htpasswd file useradm and chpasswd
+# keep with Apache's htpasswd. That program checks the password too, so every
+# format it writes is understood here without a hashing library: $apr1$ by
+# default, bcrypt, SHA. The password goes on its stdin, never its command line.
+XYMONAPI_PASSWD = os.environ.get("XYMONAPI_PASSWD", "")
+_USER = re.compile(r"[^\s:-][^\s:]*")
+
+
+def parse_basic(header: str | None) -> tuple[str, str] | None:
+    """(user, password) from an Authorization: Basic header, or None."""
+    if not header or not header.startswith("Basic "):
+        return None
+    try:
+        user, _, password = base64.b64decode(header[6:], validate=True) \
+            .decode("utf-8").partition(":")
+    except (binascii.Error, UnicodeDecodeError):
+        return None
+    return user, password
+
+
+def verify_basic(user: str, password: str) -> bool:
+    """Whether XYMONAPI_PASSWD holds this user with this password."""
+    # A user name is an argument to htpasswd, so it may not look like an
+    # option; a newline would end the password htpasswd reads.
+    if not _USER.fullmatch(user) or "\n" in password or "\r" in password:
+        return False
+    try:
+        out = subprocess.run(["htpasswd", "-v", "-i", XYMONAPI_PASSWD, user],
+                             input=password, capture_output=True, text=True,
+                             timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return out.returncode == 0

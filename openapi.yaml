@@ -12,12 +12,18 @@ info:
 servers:
   - url: /xymon/api/v1
 
+# A user and password are needed only when XYMONAPI_PASSWD is set.
+security:
+  - {}
+  - basicAuth: []
+
 paths:
   /health:
     get:
       summary: Whether xymond answers, and its version.
       operationId: health
       responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
           description: The answer; alive is false when xymond does not answer.
           content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } }
@@ -31,6 +37,7 @@ paths:
         - { name: test,    in: query, schema: { type: string }, description: "Only this test." }
         - { name: verdict, in: query, schema: { $ref: "#/components/schemas/Status" } }
       responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
           description: The matching states.
           content:
@@ -47,6 +54,7 @@ paths:
       summary: Every state that is not ok.
       operationId: listAlarms
       responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
           description: The alarms.
           content:
@@ -63,6 +71,7 @@ paths:
       summary: Each host on the board, once.
       operationId: listEntities
       responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
           description: The hosts.
           content:
@@ -85,6 +94,7 @@ paths:
         - { name: from,   in: query, schema: { $ref: "#/components/schemas/Time" } }
         - { name: to,     in: query, schema: { $ref: "#/components/schemas/Time" } }
       responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
           description: The values, one per RRD step.
           content:
@@ -108,6 +118,7 @@ paths:
         - { name: from,   in: query, schema: { $ref: "#/components/schemas/Time" } }
         - { name: to,     in: query, schema: { $ref: "#/components/schemas/Time" } }
       responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "200":
           description: The graph.
           content:
@@ -116,6 +127,12 @@ paths:
         "502": { $ref: "#/components/responses/Upstream" }
 
 components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: The users of the web pages' htpasswd file, named by XYMONAPI_PASSWD.
+
   schemas:
     Status:
       type: string
@@ -198,6 +215,9 @@ components:
         detail: { type: string }
 
   responses:
+    Unauthorized:
+      description: XYMONAPI_PASSWD is set, and no user or a wrong password was given.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     BadRequest:
       description: A parameter that is not a Xymon name or a time.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

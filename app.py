@@ -8,6 +8,8 @@ Started by xymonapi.sh, which checks Python and the modules first.
 """
 from __future__ import annotations
 
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -86,6 +88,10 @@ async def _graphs(request):
     return Response(content=png, media_type="image/png")
 
 
+# The handlers call xymon, rrdtool and htpasswd and wait for them, so the
+# server answers one request at a time. That is enough for a read-only API on
+# the Xymon server itself; run them with starlette's run_in_threadpool if it
+# is ever not.
 ROUTES = {
     "/health": _health,
     "/states": _states,
@@ -103,6 +109,27 @@ def build_app() -> FastAPI:
     spec = yaml.safe_load(SPEC_PATH.read_text())
     base = spec["servers"][0]["url"].rstrip("/")
     app = FastAPI(title=spec["info"]["title"], version=spec["info"]["version"])
+
+    if xymon.XYMONAPI_PASSWD:
+        # Refuse to start rather than answer 401 to everyone, which looks
+        # like a wrong password when it is a wrong setting.
+        if not os.access(xymon.XYMONAPI_PASSWD, os.R_OK):
+            sys.exit(f"xymonapi: cannot read XYMONAPI_PASSWD={xymon.XYMONAPI_PASSWD}")
+        if shutil.which("htpasswd") is None:
+            sys.exit("xymonapi: XYMONAPI_PASSWD is set, and checking it needs "
+                     "Apache's htpasswd, which is not on PATH")
+
+        @app.middleware("http")
+        async def _basic_auth(request, call_next):
+            if request.url.path.startswith(base + "/"):
+                creds = xymon.parse_basic(request.headers.get("authorization"))
+                if not creds or not xymon.verify_basic(*creds):
+                    return JSONResponse(
+                        {"error": "unauthorized", "detail": "a user and password are needed"},
+                        status_code=401,
+                        headers={"WWW-Authenticate": 'Basic realm="xymon"'})
+            return await call_next(request)
+
     for path, handler in ROUTES.items():
         app.add_route(base + path, handler, methods=["GET"])
     app.openapi = lambda: spec                      # type: ignore[assignment]
