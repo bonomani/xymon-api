@@ -230,12 +230,12 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 | test, under `tests/api/` | what it checks |
 |---|---|
 | `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file; the MCP client with `XYMONAPI_PASSWORD_FILE` |
-| `xymonapi-board` | `/states`, `/alarms`, `/entities`, `/status` and `/health` against a real `xymond` |
+| `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` returns one test's text, and marks it acknowledged or disabled |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
 | `xymonapi-series` | `/series` reads an RRD, an HTTP test's too, answers 404 and 400 as documented, and refuses names that leave `XYMONRRDS` |
 | `xymonapi-graphs` | `/graphs` reaches `showgraph.sh` through `XYMONWEBHOST` when `XYMONSERVERCGIURL` is a path |
 | `xymonapi-install` | `make install` lays out the files and keeps an enabled task |
-| `xymonapi-mcp` | the MCP server's tools answer with the API's board and are read-only |
+| `xymonapi-mcp` | the MCP server's eight tools, `status` included, answer with the API's board and are read-only |
 | `xymonapi-rag` | the search finds the right manual page and history passage; `ask` reaches a language model |
 | `xymonapi-rag-startup` | `index` waits for an API that is not up yet, and not for one that refuses it |
 
