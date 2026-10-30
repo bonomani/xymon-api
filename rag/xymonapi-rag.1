@@ -16,7 +16,8 @@ share.
 Reads the manual pages under $XYMONAPI_RAG_DOCS and, through
 .I xymonapi(8),
 the colour changes since $XYMONAPI_RAG_SINCE with the status text saved at
-each, at most 1000 of them; cuts them into passages, one per manual-page
+each -- page by page, the newest $XYMONAPI_RAG_MAX_HISTORY of them at most;
+cuts them into passages, one per manual-page
 section or item and one per change; and stores a vector for each in
 $XYMONAPI_RAG_INDEX, replacing what was there. Run it again to take in what
 has changed since: the task \fBtasks.d/xymonapi-rag\fR, which make install
@@ -70,6 +71,17 @@ The index file. The default is ~/.cache/xymonapi-rag/index.npz.
 .IP "\fBXYMONAPI_RAG_SINCE\fR"
 How far back index reads the history, as a time /events takes: -30d by
 default.
+.IP "\fBXYMONAPI_RAG_MAX_HISTORY\fR"
+How many changes index takes at most, the newest first: 5000 by default.
+Each is a passage to embed, and a server where thousands of changes happen
+in a month would otherwise take long to index.
+.IP "\fBXYMONAPI_RAG_OFFLINE\fR"
+When set to anything but 0 or no, the embedding model is taken from
+fastembed's cache and never downloaded: for a server without a way to
+huggingface.co. Put the model there first, by running index or search once
+on a machine that has one and copying the cache -- $FASTEMBED_CACHE_PATH,
+or the system's temporary directory -- or by setting FASTEMBED_CACHE_PATH
+to a directory seeded that way.
 .IP "\fBXYMONAPI_RAG_MODEL\fR"
 The embedding model, BAAI/bge-small-en-v1.5 by default. The index records
 the model that built it, and a search with another is refused: run index
@@ -83,8 +95,12 @@ names.
 The model ask names, llama3.1 by default.
 .IP "\fBXYMONAPI_RAG_LLM_KEY\fR"
 Sent as a bearer token when set, for a hosted model that needs a key.
-.IP "\fBXYMONAPI_URL\fR, \fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR"
-Where the API is, and the user to send it, as for xymonapi-mcp(1).
+.IP "\fBXYMONAPI_URL\fR, \fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR, \fBXYMONAPI_PASSWORD_FILE\fR"
+Where the API is, and the user to send it, as for xymonapi-mcp(1). As an
+xymonlaunch task, index reads these from a file under xymonserver.d/,
+which every Xymon program and CGI loads: put the password in a file of its
+own that the Xymon user alone can read, and name it in
+XYMONAPI_PASSWORD_FILE, so that the environment holds only its name.
 .IP "\fBXYMONAPI_PYTHON\fR"
 The Python to run with. The default is python3, found on PATH.
 

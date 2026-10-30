@@ -62,11 +62,14 @@ The graph
 draws for HOST and TEST, fetched from showgraph.sh, its wrapper, at
 $XYMONSERVERCGIURL -- prefixed with $XYMONWEBHOST when that is a path, as
 xymonserver.cfg ships it.
-.IP "\fB/events\fR [\fBentity\fR=HOST] [\fBtest\fR=TEST] [\fBsince\fR=TIME] [\fBlimit\fR=N]"
+.IP "\fB/events\fR [\fBentity\fR=HOST] [\fBtest\fR=TEST] [\fBsince\fR=TIME] [\fBlimit\fR=N] [\fBbefore\fR=SECONDS]"
 The colour changes xymond_history recorded in $XYMONHISTDIR/allevents, the
 newest first: when, the verdict before and after, and how long the one
-before had lasted. N is 1 to 1000, 100 by default. A server where nothing
-has changed colour yet has none.
+before had lasted. N is 1 to 1000, 100 by default. With before, only the
+changes older than that time: the epoch of an answer's last item asks for
+the page after it. The file is read from its end, so the newest changes
+cost the same however long the history. A server where nothing has changed
+colour yet has none.
 .IP "\fB/histlog\fR \fBentity\fR=HOST \fBtest\fR=TEST \fBtime\fR=SECONDS"
 The status text xymond_history saved under $XYMONHISTLOGS when HOST's TEST
 changed colour at that time, the epoch of an /events item; 404 when none was
@@ -75,7 +78,9 @@ saved. At most 1 MiB of it.
 A TIME is \fBnow\fR, seconds since the epoch, or a time relative to now such
 as \fB-30m\fR, \fB-24h\fR, \fB-7d\fR or \fB-2w\fR. \fBfrom\fR defaults to
 -24h and \fBto\fR to now. A host or test name that is not one Xymon uses,
-or a time it cannot read, is answered with 400.
+or a time it cannot read, is answered with 400. A test name may hold a
+colon, as an HTTP test's RRD file does (tcp.http.www.example.com:8080,);
+a host name may not.
 
 .SH ENVIRONMENT
 The task file loads xymonserver.cfg, and xymonapi uses these settings from it:

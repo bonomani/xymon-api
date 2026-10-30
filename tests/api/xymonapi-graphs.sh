@@ -61,6 +61,9 @@ assert_contains 'graph_start=1699999800' "$req" "from the time asked"
 assert_contains 'graph_end=1700000700' "$req" "to the time asked"
 assert_contains 'action=view' "$req" "as a view"
 
+assert_equal "200" "$(graph 'entity=web.example.com&test=tcp.http.web.example.com%3A8080%2C')" "/graphs of an HTTP test, whose name holds a colon"
+assert_contains 'service=tcp.http.web.example.com%3A8080%2C' "$(cat "$work/web.req")" "which reaches showgraph.sh encoded"
+
 assert_equal "502" "$(graph 'entity=html.example.com&test=conn')" "an HTML page from showgraph"
 assert_contains 'did not answer with a PNG' "$(cat "$work/graph")" "is refused, and the answer says why"
 

@@ -35,6 +35,8 @@ INDEX = Path(os.environ.get("XYMONAPI_RAG_INDEX",
                             Path.home() / ".cache" / "xymonapi-rag" / "index.npz"))
 DOCS = os.environ.get("XYMONAPI_RAG_DOCS", "")
 SINCE = os.environ.get("XYMONAPI_RAG_SINCE", "-30d")
+MAX_HISTORY = int(os.environ.get("XYMONAPI_RAG_MAX_HISTORY", "5000") or 0)
+OFFLINE = os.environ.get("XYMONAPI_RAG_OFFLINE", "") not in ("", "0", "no")
 LLM_URL = os.environ.get("XYMONAPI_RAG_LLM_URL", "http://127.0.0.1:11434/v1").rstrip("/")
 LLM_MODEL = os.environ.get("XYMONAPI_RAG_LLM_MODEL", "llama3.1")
 LLM_KEY = os.environ.get("XYMONAPI_RAG_LLM_KEY", "")
@@ -61,7 +63,9 @@ def embed(texts: list[str], query: bool = False):
     import numpy as np
     from fastembed import TextEmbedding
     if _embedder is None:
-        _embedder = TextEmbedding(MODEL)
+        # Offline: the model must be in fastembed's cache already (an earlier
+        # run, or FASTEMBED_CACHE_PATH seeded by hand); nothing is downloaded.
+        _embedder = TextEmbedding(MODEL, local_files_only=True) if OFFLINE else TextEmbedding(MODEL)
     vectors = _embedder.query_embed(texts) if query else _embedder.embed(texts)
     return np.array(list(vectors), dtype="float32")
 
@@ -143,7 +147,7 @@ def history_passages(since: str) -> list[dict]:
     import client                        # mcp-server/client.py
     out = []
     try:
-        for ev in _events_when_up(client, since):
+        for ev in _events_since(client, since):
             try:
                 log = client.api("/histlog", entity=ev["entity"], test=ev["test"],
                                  time=str(ev["epoch"]))["text"][:HISTLOG_TEXT]
@@ -165,7 +169,23 @@ def history_passages(since: str) -> list[dict]:
     return out
 
 
-def _events_when_up(client, since: str) -> list[dict]:
+def _events_since(client, since: str) -> list[dict]:
+    """Every change since SINCE, newest first, read page by page: /events
+    gives at most 1000, and before= asks for the ones older than the last.
+    At most MAX_HISTORY of them, so that indexing stays minutes, not hours,
+    on a server where thousands of changes happen in a month."""
+    out: list[dict] = []
+    before = None
+    while len(out) < MAX_HISTORY:
+        page = _events_when_up(client, since, before)
+        out += page[:MAX_HISTORY - len(out)]
+        if len(page) < 1000:
+            break
+        before = str(page[-1]["epoch"])
+    return out
+
+
+def _events_when_up(client, since: str, before: str | None) -> list[dict]:
     """/events, waiting for the API to come up: as an xymonlaunch task, index
     can start seconds before xymonapi listens, and its only failure then is
     "cannot reach" with no HTTP status. Try for about a minute; anything the
@@ -173,7 +193,7 @@ def _events_when_up(client, since: str) -> list[dict]:
     import time
     for attempt in range(6):
         try:
-            return client.api("/events", since=since, limit="1000")["items"]
+            return client.api("/events", since=since, limit="1000", before=before)["items"]
         except client.APIError as e:
             if e.status is not None or attempt == 5:
                 raise

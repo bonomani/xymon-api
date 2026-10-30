@@ -3,7 +3,9 @@
 server and the search in rag/ both read the API through it.
 
 XYMONAPI_URL is where the API is, http://127.0.0.1:1986 by default.
-XYMONAPI_USER and XYMONAPI_PASSWORD are sent when the API asks for a user.
+XYMONAPI_USER and XYMONAPI_PASSWORD are sent when the API asks for a user;
+XYMONAPI_PASSWORD_FILE names a file holding the password instead, for an
+environment that other programs read too, as xymonserver.cfg's is.
 """
 from __future__ import annotations
 
@@ -17,6 +19,18 @@ from urllib.parse import urlencode, urlsplit
 URL = os.environ.get("XYMONAPI_URL", "http://127.0.0.1:1986").rstrip("/")
 USER = os.environ.get("XYMONAPI_USER", "")
 PASSWORD = os.environ.get("XYMONAPI_PASSWORD", "")
+PASSWORD_FILE = os.environ.get("XYMONAPI_PASSWORD_FILE", "")
+
+
+def _password() -> str:
+    """XYMONAPI_PASSWORD, or the first line of XYMONAPI_PASSWORD_FILE."""
+    if PASSWORD or not PASSWORD_FILE:
+        return PASSWORD
+    try:
+        with open(PASSWORD_FILE, encoding="utf-8") as fd:
+            return fd.readline().rstrip("\r\n")
+    except OSError as e:
+        raise APIError(f"cannot read XYMONAPI_PASSWORD_FILE={PASSWORD_FILE}: {e.strerror}") from e
 
 
 class APIError(RuntimeError):
@@ -46,11 +60,12 @@ def api(path: str, **params: str | None) -> dict:
     # http and https only: urllib also reads file:// and ftp:// URLs.
     if urlsplit(URL).scheme not in ("http", "https"):
         raise APIError(f"XYMONAPI_URL must be an http:// or https:// URL, not {URL!r}")
-    query = urlencode({k: v for k, v in params.items() if v})
+    # Left out when not given; "0" is a value.
+    query = urlencode({k: v for k, v in params.items() if v is not None and v != ""})
     try:
         req = urllib.request.Request(f"{URL}/xymon/api/v1{path}" + (f"?{query}" if query else ""))
         if USER:
-            token = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
+            token = base64.b64encode(f"{USER}:{_password()}".encode()).decode()
             req.add_header("Authorization", f"Basic {token}")
         with _opener.open(req, timeout=30) as r:
             body = r.read(MAX_BODY + 1)

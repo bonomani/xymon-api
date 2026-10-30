@@ -45,8 +45,16 @@ for v in 1.0 2.0 3.0; do
 done
 assert_contains '"metric":"la"' "$body" "/series names the dataset it read"
 
+# An HTTP test's file is named after its URL, colon and all; rrdtool reads
+# the colon as its separator unless it is escaped.
+http="$work/rrd/host.example.com/tcp.http.host.example.com:8080,.rrd"
+rrdtool create "$http" --start "$t0" --step 300 DS:sec:GAUGE:600:U:U RRA:AVERAGE:0.5:1:100
+rrdtool update "$http" "$((t0 + 300)):0.5"
+body=$(api_get "/series?entity=host.example.com&test=tcp.http.host.example.com:8080,&metric=sec&from=$t0&to=$((t0 + 300))")
+assert_contains '"v":0.5' "$body" "/series reads an HTTP test's RRD, whose name holds a colon"
+
 assert_equal "400" "$(api_code '/series?entity=../host.example.com&test=la&metric=la')" "a host name with ../"
-assert_equal "400" "$(api_code '/series?entity=host.example.com&test=la:x&metric=la')" "a test name with a colon"
+assert_equal "400" "$(api_code '/series?entity=host:example.com&test=la&metric=la')" "a host name with a colon"
 assert_equal "400" "$(api_code '/series?entity=host.example.com&test=la&metric=l:a')" "a metric name with a colon"
 assert_equal "400" "$(api_code '/series?entity=host.example.com&test=la&metric=la&from=yesterday')" "a time that is not now, a number or like -24h"
 assert_equal "404" "$(api_code '/series?entity=host.example.com&test=disk&metric=la')" "an RRD file that does not exist"

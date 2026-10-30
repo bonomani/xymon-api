@@ -111,7 +111,8 @@ def _graphs(request):
 def _events(request):
     q = request.query_params
     try:
-        items = xymon.events(q.get("entity"), q.get("test"), q.get("since"), q.get("limit"))
+        items = xymon.events(q.get("entity"), q.get("test"), q.get("since"), q.get("limit"),
+                             q.get("before"))
     except Exception as exc:                        # noqa: BLE001
         return _refused(exc)
     return JSONResponse({"items": items})

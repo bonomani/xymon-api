@@ -72,6 +72,7 @@ assert_equal "404" "$(api_code '/histlog?entity=web.example.com&test=http&time=1
 assert_equal "400" "$(api_code '/histlog?entity=../web.example.com&test=http&time=1699400000')" "a host name with ../"
 assert_equal "400" "$(api_code '/histlog?entity=web.example.com&test=http&time=yesterday')" "a time that is not a number"
 assert_equal "400" "$(api_code '/events?entity=..&test=http')" "/events, a host name of .."
+assert_equal "400" "$(api_code '/events?before=soon')" "/events, before that is not a number"
 assert_equal "400" "$(api_code '/events?limit=0')" "/events, limit 0"
 assert_equal "400" "$(api_code '/events?limit=1001')" "/events, a limit above 1000"
 # A digit int() refuses, and a time too large for the calendar.
@@ -87,6 +88,26 @@ curl -s --max-time 30 -o "$work/big.json" "http://127.0.0.1:$API_PORT/xymon/api/
 size=$(wc -c < "$work/big.json" | tr -d ' ')
 [ "$size" -gt 1000000 ] && [ "$size" -lt 1100000 ] \
 	|| fail "a saved status of 1.2 MB came back as $size bytes, not about 1 MiB"
+
+# A history of thousands of changes is read from the end of the file: the
+# newest 1000 come, before= gives the page after them, and the last line,
+# written without a newline, is read like the others.
+stop_process "$API_PID"; API_PID=""
+mkdir -p "$work/long"
+awk 'BEGIN { for (i = 1; i <= 2500; i++) printf "h%d.example.com conn %d %d 60 red green 0\n", i % 7, 1700000000 + i * 10, 1700000000 + i * 10 - 60 }' > "$work/long/allevents"
+printf 'last.example.com conn 1700030000 1700029940 60 red green 0' >> "$work/long/allevents"
+XYMONHISTDIR="$work/long" start_api
+page=$(api_get '/events?limit=1000')
+assert_equal "1000" "$(printf '%s' "$page" | grep -o '"epoch":' | wc -l | tr -d ' ')" "limit=1000 gives a thousand"
+assert_contains '"entity":"last.example.com"' "$(printf '%s' "$page" | head -c 200)" "the newest first: the last line, which ends without a newline"
+assert_contains '"epoch":1700015020' "$page" "down to the thousandth-newest"
+assert_not_contains '"epoch":1700015010' "$page" "and not the one before it"
+page2=$(api_get '/events?limit=1000&before=1700015020')
+assert_contains '"epoch":1700015010' "$(printf '%s' "$page2" | head -c 200)" "before= continues where the page ended"
+assert_not_contains '"epoch":1700015020' "$page2" "without repeating its last change"
+third=$(api_get '/events?limit=1000&before=1700005020')
+assert_equal "501" "$(printf '%s' "$third" | grep -o '"epoch":' | wc -l | tr -d ' ')" "the last page holds the rest"
+assert_equal '{"items":[]}' "$(api_get '/events?before=1700000010')" "and nothing is older than the first"
 
 # A server where nothing has changed colour yet has no allevents.
 stop_process "$API_PID"

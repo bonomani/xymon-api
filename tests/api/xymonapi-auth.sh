@@ -41,10 +41,12 @@ start_api
 url="http://127.0.0.1:$API_PORT/xymon/api/v1/health"
 code() { curl -s -o /dev/null -w '%{http_code}' "$@" "$url"; }
 
+rc=0
 assert_equal "401" "$(code)" "no user and password"
 # Header names are case-insensitive, and uvicorn sends them in lower case.
 assert_contains 'www-authenticate: basic realm="xymon"' "$(curl -s -D - -o /dev/null "$url" | tr -d '\r' | tr 'A-Z' 'a-z')" "the 401 asks for Basic authentication"
 assert_equal "200" "$(code -u alice:secret)" "alice, \$apr1\$, right password"
+assert_equal "200" "$(code -H "Authorization: basic $(printf 'alice:secret' | base64)")" "the scheme spelt basic, in lower case"
 assert_equal "401" "$(code -u alice:wrong)" "alice, wrong password"
 assert_equal "200" "$(code -u bob:s3cret)" "bob, bcrypt, right password"
 assert_equal "401" "$(code -u carol:secret)" "a user the file does not hold"
@@ -62,5 +64,19 @@ rc=0
 XYMONAPI_PASSWD="$work/no-such-file" "$ROOT/xymonapi.sh" > "$work/nofile.log" 2>&1 || rc=$?
 assert_equal "1" "$rc" "the API with a password file it cannot read"
 assert_contains "cannot read XYMONAPI_PASSWD" "$(cat "$work/nofile.log")" "and it says why"
+
+# The MCP server's client sends the user and password too, the password from
+# a file when XYMONAPI_PASSWORD_FILE names one: an environment every Xymon
+# program reads need then hold only the file's name.
+printf 'secret\n' > "$work/password"
+start_api
+XYMONAPI_USER=alice XYMONAPI_PASSWORD_FILE="$work/password" \
+	mcp "http://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || rc=$?
+answer=$(grep '"id":3' "$work/mcp.out") || fail "no answer to the health call: $(tail -n 5 "$work/mcp.err")"
+assert_contains 'alive' "$answer" "the MCP client is let in with the password from XYMONAPI_PASSWORD_FILE"
+assert_not_contains '"isError":true' "$answer" "and not refused"
+XYMONAPI_USER=alice XYMONAPI_PASSWORD_FILE="$work/no-such-file" \
+	mcp "http://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true
+assert_contains 'cannot read XYMONAPI_PASSWORD_FILE' "$(grep '"id":3' "$work/mcp.out")" "a password file that is not there is a readable error"
 
 pass "XYMONAPI_PASSWD lets in only the users and passwords of its htpasswd file, in either format"

@@ -57,8 +57,10 @@ followed, so the credentials go to XYMONAPI_URL and nowhere else.
 .SH ENVIRONMENT
 .IP "\fBXYMONAPI_URL\fR"
 Where xymonapi(8) is. The default is http://127.0.0.1:1986.
-.IP "\fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR"
-The user and password sent when the API has XYMONAPI_PASSWD set.
+.IP "\fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR, \fBXYMONAPI_PASSWORD_FILE\fR"
+The user and password sent when the API has XYMONAPI_PASSWD set. The
+password can come from the first line of the file XYMONAPI_PASSWORD_FILE
+names instead, for an environment that other programs see.
 .IP "\fBXYMONAPI_PYTHON\fR"
 The Python to run with, the python3 of a virtualenv that holds mcp for
 instance. The default is python3, found on PATH.

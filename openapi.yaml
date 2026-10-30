@@ -89,7 +89,7 @@ paths:
       operationId: listSeries
       parameters:
         - { name: entity, in: query, required: true, schema: { type: string }, description: "The host." }
-        - { name: test,   in: query, required: true, schema: { type: string }, description: "The RRD file, without .rrd, named after the data, not the board column: la (cpu load), memory, tcp.conn, tcp.ssh, tcp.http, disk,<mount>..." }
+        - { name: test,   in: query, required: true, schema: { type: string }, description: "The RRD file, without .rrd, named after the data, not the board column: la (cpu load), memory, tcp.conn, tcp.ssh, tcp.http.<host>:<port>, (an HTTP test), disk,<mount>..." }
         - { name: metric, in: query, schema: { type: string, default: lambda }, description: "The dataset in that file." }
         - { name: from,   in: query, schema: { $ref: "#/components/schemas/Time" } }
         - { name: to,     in: query, schema: { $ref: "#/components/schemas/Time" } }
@@ -135,6 +135,7 @@ paths:
         - { name: test,   in: query, schema: { type: string }, description: "Only this test." }
         - { name: since,  in: query, schema: { $ref: "#/components/schemas/Time" }, description: "Only changes at or after this time." }
         - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+        - { name: before, in: query, schema: { type: integer }, description: "Only changes older than this, in seconds since the epoch: the epoch of an answer's last item gives the next page." }
       responses:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "200":

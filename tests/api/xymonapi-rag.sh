@@ -64,6 +64,10 @@ rag index > "$work/index.out" || rc=$?
 [ "$rc" -eq 77 ] && skip "$(cat "$work/rag.err")"
 [ "$rc" -eq 0 ] || fail "xymonapi-rag index exited with $rc: $(tail -n 5 "$work/rag.err")"
 assert_contains "indexed" "$(cat "$work/index.out")" "index says what it did"
+# The model is in fastembed's cache now: offline, nothing is downloaded,
+# and the search works as before.
+XYMONAPI_RAG_OFFLINE=1 rag search -k 1 'anything' > /dev/null \
+	|| fail "a search with XYMONAPI_RAG_OFFLINE=1 failed with the model cached: $(tail -n 3 "$work/rag.err")"
 
 # top QUESTION [ARGS] -- the title of the passage nearest QUESTION.
 top() {
@@ -147,6 +151,18 @@ rc=0
 XYMONAPI_RAG_LLM_URL="file:///etc/passwd" rag ask 'a full disk' > /dev/null || rc=$?
 [ "$rc" -ne 0 ] || fail "ask with a file:// model URL succeeded"
 assert_contains 'must be an http' "$(cat "$work/rag.err")" "a file:// model URL is refused"
+
+# More changes than one /events answers: 1100 more, newer than the two
+# above and appended after them as xymond_history would, read in two pages,
+# so the oldest change of all is in the index too -- unless
+# XYMONAPI_RAG_MAX_HISTORY caps them, which keeps the newest.
+awk 'BEGIN { for (i = 1; i <= 1100; i++) printf "many%d.example.com conn %d %d 60 red green 0\n", i, 1699500000 + i * 10, 1699500000 + i * 10 - 60 }' >> "$work/hist/allevents"
+XYMONAPI_RAG_INDEX="$work/index3.npz" rag index > "$work/index3.out" || fail "indexing 1102 changes failed: $(tail -n 5 "$work/rag.err")"
+assert_contains 'web.example.com http' "$(XYMONAPI_RAG_INDEX="$work/index3.npz" rag search -k 1 --kind history 'HTTP 500 error on the login page')" "the oldest of 1102 changes is indexed: /events was read page by page"
+XYMONAPI_RAG_INDEX="$work/index4.npz" XYMONAPI_RAG_MAX_HISTORY=50 rag index > /dev/null || fail "indexing with a cap failed: $(tail -n 5 "$work/rag.err")"
+assert_not_contains 'web.example.com' "$(XYMONAPI_RAG_INDEX="$work/index4.npz" rag search -k 3 --kind history 'HTTP 500 error on the login page')" "with XYMONAPI_RAG_MAX_HISTORY=50 the oldest is left out"
+# Names a digit apart embed much the same, so any of the newest fifty will do.
+assert_match 'many1(0[5-9][0-9]|100)\.example\.com conn' "$(XYMONAPI_RAG_INDEX="$work/index4.npz" rag search -k 1 --kind history 'many1100.example.com conn red')" "and the newest kept"
 
 # A /histlog that fails for another reason than a missing file -- here an
 # API without XYMONHISTLOGS, which answers 502 -- must fail the indexing, not

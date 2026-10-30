@@ -89,6 +89,11 @@ Apache on port 8080. Check each against your server:
 - **Password**: the htpasswd file `xymon-apache.conf` names may not exist
   yet. Create it with `htpasswd -cB FILE USER` and name it in
   `XYMONAPI_PASSWD`. It is read on every request: no restart after a change.
+- **The index task's password**: it reads `xymonserver.d/`, which every Xymon
+  program and CGI loads, so a password there is in all their environments,
+  and a file there that only the Xymon user can read may stop a CGI running
+  as the web server's user from loading its settings. Put the password in a
+  file of its own, mode 600, and name it in `XYMONAPI_PASSWORD_FILE`.
 - **Tasks at start-up**: xymonlaunch starts every task within seconds of
   boot, and a task that then exits is not run again until its INTERVAL has
   passed. The index task hit a not-yet-listening API this way, so it `NEEDS
@@ -107,6 +112,11 @@ XYMONAPI_PYTHON="/Users/me/.pyenv/versions/3.12.3/bin/python3"
 XYMONAPI_LISTEN="127.0.0.1:1986"
 XYMONAPI_PASSWD="/opt/homebrew/opt/xymon-server-preview/server/etc/xymonpasswd"
 PATH="$PATH:/opt/homebrew/bin"
+# For the daily index task
+XYMONAPI_URL="http://127.0.0.1:1986"
+XYMONAPI_USER="me"
+XYMONAPI_PASSWORD_FILE="/opt/homebrew/etc/xymon-preview/xymonapi.password"
+XYMONAPI_RAG_DOCS="/opt/homebrew/opt/xymon-server-preview/share/man"
 ```
 
 ## MCP server
@@ -151,10 +161,13 @@ rag/xymonapi-rag.sh index
 rag/xymonapi-rag.sh search "what does purple mean"
 ```
 
-The first run downloads a 65 MB embedding model; indexing takes about a
-minute. The index holds the last 30 days of history, so `make install` also
-writes a daily xymonlaunch task, `tasks.d/xymonapi-rag`, DISABLED: remove the
-line, and put the variables above in a file under `xymonserver.d/`. `ask` hands the passages to a
+The first run downloads a 65 MB embedding model, which `XYMONAPI_RAG_OFFLINE`
+can forbid on a server without Internet, once the cache is seeded; indexing
+takes about a minute. The index holds the last 30 days of history, the newest
+5000 changes at most, so `make install` also writes a daily xymonlaunch task,
+`tasks.d/xymonapi-rag`, DISABLED: remove the line, and put the variables above
+in a file under `xymonserver.d/`, the password in a file of its own named by
+`XYMONAPI_PASSWORD_FILE`. `ask` hands the passages to a
 language model speaking the OpenAI-compatible API, a local Ollama by default;
 with Claude, the MCP tools are the simpler way. Every command and setting is
 in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).

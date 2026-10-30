@@ -21,7 +21,6 @@ import re
 import subprocess
 import time
 import urllib.request
-from collections import deque
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
@@ -34,10 +33,13 @@ XYMONHISTDIR = os.environ.get("XYMONHISTDIR", "")
 XYMONHISTLOGS = os.environ.get("XYMONHISTLOGS", "")
 BOARD_FIELDS = ["hostname", "testname", "color", "lastchange"]
 
-# A name from the request becomes part of a file path and of an rrdtool
-# argument, so it may not hold "/" (a path outside XYMONRRDS) or ":" (rrdtool's
-# own separator). Host and test names in Xymon never do.
+# A name from the request becomes part of a file path, so it may not hold
+# "/" or "..": a path outside XYMONRRDS. A host name never holds ":" either;
+# a test name can -- xymond_rrd names an HTTP test's file after its URL,
+# tcp.http.www.example.com:8080,.rrd -- and ":" is rrdtool's own separator,
+# so it is escaped where the name reaches rrdtool.
 _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.,-]*")
+_TEST = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.,:-]*")
 _DSNAME = re.compile(r"[A-Za-z0-9_]{1,19}")
 # Bounded: int() refuses thousands of digits with a ValueError of its own
 # (Python 3.11+), and nothing in Xymon is older than 1970 or past 12 digits.
@@ -143,7 +145,8 @@ def entities() -> list[dict]:
 
 
 def _name(value: str | None, what: str) -> str:
-    if not value or not _NAME.fullmatch(value) or ".." in value:
+    rx = _TEST if what == "test" else _NAME
+    if not value or not rx.fullmatch(value) or ".." in value:
         raise BadRequest(f"{what} must be a Xymon host or test name")
     return value
 
@@ -176,8 +179,10 @@ def series(entity: str | None, test: str | None, metric: str | None,
     rrd = os.path.join(XYMONRRDS, host, f"{tst}.rrd")
     if not os.path.isfile(rrd):
         raise NotFound(f"no RRD file for {host} {tst}")
+    # xport keeps to 400 rows unless told otherwise (--maxrows), so a span of
+    # years comes back consolidated, not as every step: the answer is bounded.
     out = subprocess.run(["rrdtool", "xport", "--json", "--start", str(start),
-                          "--end", str(end), f"DEF:v={rrd}:{ds}:AVERAGE",
+                          "--end", str(end), f"DEF:v={rrd.replace(':', chr(92) + ':')}:{ds}:AVERAGE",
                           "XPORT:v:v"],
                          capture_output=True, text=True, timeout=30)
     if out.returncode != 0:
@@ -234,12 +239,38 @@ _GRAPH_MAX = 8 * 1024 * 1024
 _HISTLOG_MAX = 1024 * 1024
 
 
+def _lines_from_end(path: str, block: int = 65536):
+    """The lines of a file, last first, read in blocks from its end: allevents
+    grows for years, and the newest changes are at its end."""
+    with open(path, "rb") as fd:
+        fd.seek(0, os.SEEK_END)
+        pos = fd.tell()
+        rest = b""
+        while pos > 0:
+            size = min(block, pos)
+            pos -= size
+            fd.seek(pos)
+            chunk = fd.read(size) + rest
+            lines = chunk.split(b"\n")
+            rest = lines[0]              # cut by the block boundary, or the file's first line
+            for line in reversed(lines[1:]):
+                yield line.decode("utf-8", errors="replace")
+        if rest:
+            yield rest.decode("utf-8", errors="replace")
+
+
 def events(entity: str | None, test: str | None, since: str | None,
-           limit: str | None) -> list[dict]:
-    """The colour changes in allevents, the newest first."""
+           limit: str | None, before: str | None = None) -> list[dict]:
+    """The colour changes in allevents, the newest first. BEFORE, seconds
+    since the epoch, keeps to the changes older than that: the epoch of the
+    last change of one answer gives the next, and so a history longer than
+    1000 changes is read page by page."""
     host = _name(entity, "entity") if entity else None
     tst = _name(test, "test") if test else None
     start = epoch(since) if since else 0
+    if before is not None and not _DIGITS.fullmatch(before):
+        raise BadRequest("before must be seconds since the epoch")
+    end = int(before) if before else None
     try:
         n = int(limit) if limit else 100
     except ValueError:
@@ -255,21 +286,28 @@ def events(entity: str | None, test: str | None, since: str | None,
     path = os.path.join(XYMONHISTDIR, "allevents")
     if not os.path.isfile(path):
         return []                       # nothing has changed colour yet
-    last: deque[list[str]] = deque(maxlen=n)
-    with open(path, encoding="utf-8",
-              errors="replace") as fd:
-        for line in fd:
-            f = line.split()
-            if len(f) < 7 or not _DIGITS.fullmatch(f[2]) or int(f[2]) < start:
-                continue
-            if (host and f[0] != host) or (tst and f[1] != tst):
-                continue
-            last.append(f)
+    # From the end, so the newest N cost the same whatever the file's length;
+    # xymond_history appends in time order, so a line older than SINCE ends it.
+    found: list[list[str]] = []
+    for line in _lines_from_end(path):
+        f = line.split()
+        if len(f) < 7 or not _DIGITS.fullmatch(f[2]):
+            continue
+        t = int(f[2])
+        if t < start:
+            break
+        if end is not None and t >= end:
+            continue
+        if (host and f[0] != host) or (tst and f[1] != tst):
+            continue
+        found.append(f)
+        if len(found) == n:
+            break
     return [{"entity": f[0], "test": f[1], "time": _iso(f[2]), "epoch": int(f[2]),
              "verdict": COLOUR_STATUS.get(f[5], "unknown"),
              "previous": COLOUR_STATUS.get(f[6], "unknown"),
              "previous_duration": int(f[4]) if _DIGITS.fullmatch(f[4]) else None}
-            for f in reversed(last)]
+            for f in found]
 
 
 def histlog(entity: str | None, test: str | None, when: str | None) -> dict:
@@ -305,7 +343,8 @@ _USER = re.compile(r"[^\s:-][^\s:]*")
 
 def parse_basic(header: str | None) -> tuple[str, str] | None:
     """(user, password) from an Authorization: Basic header, or None."""
-    if not header or not header.startswith("Basic "):
+    # The scheme is case-insensitive (RFC 7235): "basic" is sent too.
+    if not header or header[:6].lower() != "basic ":
         return None
     try:
         user, _, password = base64.b64decode(header[6:], validate=True) \
