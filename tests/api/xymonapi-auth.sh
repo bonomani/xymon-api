@@ -10,7 +10,9 @@
 # path is covered, /openapi.json and FastAPI's /docs included. A user
 # name that looks like an option is refused, not passed to htpasswd as one.
 # A password file the API cannot read stops it from starting. /client
-# writes a setup script for the user who asked, at the address asked.
+# writes a setup script for the user who asked, at the address asked; run
+# as a laptop runs it, that script gets a password holding a space, a
+# quote, a backslash and a glob character to the API as it is.
 #
 # Skips where the API cannot run (tests/lib/xymonapi.sh). Needs the xymon
 # client of the Xymon tree in XYMON_SRC (for a free port), Apache's htpasswd
@@ -79,6 +81,34 @@ assert_equal "400" "$(curl -s -o /dev/null -w '%{http_code}' -u alice:secret "ht
 env=$(curl -s -u bob:s3cret "http://127.0.0.1:$API_PORT/xymon/api/v1/client?format=env")
 assert_contains "XYMONAPI_USER=bob" "$env" "format=env gives the settings, for the user who asked"
 assert_not_contains "git clone" "$env" "and no script"
+
+# The script's own password path: the password goes to curl in a config on
+# its stdin, with " and \ escaped as curl wants, so one holding a space, a
+# quote, a backslash and a glob character reaches the API as it is, and is
+# on no command line. The script is run as a laptop would, up to its health
+# check and registration: git, make and claude are stubs on PATH (claude
+# records its arguments), the virtualenv is already there, and the password
+# file is written, so nothing is fetched, built, or asked.
+hard='pa ss"wo\rd*'
+htpasswd -bB "$work/htpasswd" carol "$hard" 2>/dev/null || fail "htpasswd could not add carol"
+curl -s -u "carol:$hard" "http://127.0.0.1:$API_PORT/xymon/api/v1/client" > "$work/carol.sh"
+grep -q '^USER=carol$' "$work/carol.sh" || fail "/client did not write carol: $(head -n 20 "$work/carol.sh")"
+lap=$work/lap
+mkdir -p "$work/stub" "$lap/src/.git" "$lap/prefix/libexec/xymonapi/venv/bin" "$lap/cfg/xymon-api"
+printf '#!/bin/sh\nexit 0\n' > "$work/stub/git"
+cp "$work/stub/git" "$work/stub/make"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/claude.args"\n' "$lap" > "$work/stub/claude"
+: > "$lap/prefix/libexec/xymonapi/venv/bin/python3"
+chmod 755 "$work/stub/git" "$work/stub/make" "$work/stub/claude" "$lap/prefix/libexec/xymonapi/venv/bin/python3"
+printf '%s\n' "$hard" > "$lap/cfg/xymon-api/xymon.password"
+rc=0
+out=$(cd "$lap" && HOME="$lap" XDG_CONFIG_HOME="$lap/cfg" XYMONAPI_SRC="$lap/src" PATH="$work/stub:$PATH" \
+	sh "$work/carol.sh" "$lap/prefix" 2>&1) || rc=$?
+[ "$rc" -eq 0 ] || fail "the setup script failed with $rc: $out"
+assert_not_contains 'refused the password' "$out" "the API took carol's password from the script's curl"
+assert_contains 'the API answers' "$out" "and the script read the answer (no xymond here, so alive is false)"
+assert_contains 'XYMONAPI_USER=carol' "$(cat "$lap/claude.args")" "the MCP registration names the user"
+assert_contains "XYMONAPI_PASSWORD_FILE=$lap/cfg/xymon-api/xymon.password" "$(cat "$lap/claude.args")" "and the password file"
 
 # Xymon's own password file is the default: with XYMONHOME set and
 # etc/xymonpasswd there, nothing else need be set, and the API asks for
