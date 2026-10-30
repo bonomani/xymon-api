@@ -75,8 +75,10 @@ The embedding model, BAAI/bge-small-en-v1.5 by default. The index records
 the model that built it, and a search with another is refused: run index
 again after changing it.
 .IP "\fBXYMONAPI_RAG_LLM_URL\fR"
-The OpenAI-compatible API ask uses. The default,
-http://127.0.0.1:11434/v1, is a local Ollama: no key, no cost.
+The OpenAI-compatible API ask uses, an http:// or https:// URL. The default,
+http://127.0.0.1:11434/v1, is a local Ollama: no key, no cost. A redirect
+from it is an error, not followed: the key below would go to the host it
+names.
 .IP "\fBXYMONAPI_RAG_LLM_MODEL\fR"
 The model ask names, llama3.1 by default.
 .IP "\fBXYMONAPI_RAG_LLM_KEY\fR"

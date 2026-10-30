@@ -124,6 +124,30 @@ XYMONAPI_RAG_LLM_URL="http://127.0.0.1:1/v1" rag ask 'a full disk' > /dev/null |
 [ "$rc" -ne 0 ] || fail "ask with no language model succeeded"
 assert_contains 'no language model at' "$(cat "$work/rag.err")" "and says why"
 
+# A model that redirects: the bearer key must not follow to the host named.
+# TARGET records whatever reaches it; REDIRECT answers 302 to TARGET.
+"${XYMONAPI_PYTHON:-python3}" "$ROOT/tests/lib/fake-llm.py" "$work/target.port" "$work/target.req" &
+TARGET_PID=$!
+for _ in $(seq 1 50); do [ -s "$work/target.port" ] && break; sleep 0.1; done
+"${XYMONAPI_PYTHON:-python3}" "$ROOT/tests/lib/fake-llm.py" "$work/redirect.port" "$work/redirect.req" \
+	"http://127.0.0.1:$(cat "$work/target.port")/v1/chat/completions" &
+REDIRECT_PID=$!
+register_cleanup 'stop_process "$TARGET_PID" "$REDIRECT_PID"'
+for _ in $(seq 1 50); do [ -s "$work/redirect.port" ] && break; sleep 0.1; done
+[ -s "$work/redirect.port" ] || fail "the redirecting language model did not start"
+rc=0
+XYMONAPI_RAG_LLM_URL="http://127.0.0.1:$(cat "$work/redirect.port")/v1" XYMONAPI_RAG_LLM_KEY=secret-key \
+	rag ask 'a full disk' > /dev/null || rc=$?
+[ "$rc" -ne 0 ] || fail "ask succeeded against a model that redirected"
+assert_contains 'Authorization: Bearer secret-key' "$(cat "$work/redirect.req")" "the model's own address got the key"
+assert_contains 'redirect, which is not followed' "$(cat "$work/rag.err")" "a redirect is an error that says so"
+[ -e "$work/target.req" ] && fail "the redirect was followed, with: $(head -n 1 "$work/target.req")"
+
+rc=0
+XYMONAPI_RAG_LLM_URL="file:///etc/passwd" rag ask 'a full disk' > /dev/null || rc=$?
+[ "$rc" -ne 0 ] || fail "ask with a file:// model URL succeeded"
+assert_contains 'must be an http' "$(cat "$work/rag.err")" "a file:// model URL is refused"
+
 # A /histlog that fails for another reason than a missing file -- here an
 # API without XYMONHISTLOGS, which answers 502 -- must fail the indexing, not
 # build an index without the texts.

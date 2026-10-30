@@ -37,6 +37,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _opener = urllib.request.build_opener(_NoRedirect)
+# An answer of the API is a board or a list of events: never near this.
+MAX_BODY = 16 * 1024 * 1024
 
 
 def api(path: str, **params: str | None) -> dict:
@@ -51,7 +53,10 @@ def api(path: str, **params: str | None) -> dict:
             token = base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
             req.add_header("Authorization", f"Basic {token}")
         with _opener.open(req, timeout=30) as r:
-            return json.load(r)
+            body = r.read(MAX_BODY + 1)
+        if len(body) > MAX_BODY:
+            raise APIError(f"xymonapi at {URL} answered more than {MAX_BODY} bytes")
+        return json.loads(body)
     except urllib.error.HTTPError as e:
         # The API's own explanation, not a bare status.
         raise APIError(f"xymonapi answered {e.code}: {e.read().decode(errors='replace')}",

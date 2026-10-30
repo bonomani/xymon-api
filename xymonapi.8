@@ -53,7 +53,8 @@ the conn test is in tcp.conn.rrd and the ssh test in tcp.ssh.rrd, cpu load
 is in la.rrd and memory in memory.rrd, and a disk is in disk,<mount with
 commas for slashes>.rrd. DATASET is a column in that file: lambda is the
 load average in la.rrd, sec the response time in a tcp.*.rrd. DATASET
-defaults to lambda, and a missing file or dataset is answered 404. To see
+defaults to lambda, and a missing file or dataset is answered 404; from
+after to is a 400. To see
 what a host has, list $XYMONRRDS/HOST/ there, or run rrdtool info on a file.
 .IP "\fB/graphs\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
 The graph
@@ -130,10 +131,15 @@ $XYMONHOME/etc and $XYMONHOME/ext are links to wherever an installation keeps
 those directories, /etc/xymon for instance.
 
 .SH NOTES
+A failure of the server's own -- xymond not answering, rrdtool missing --
+is a 502. Its answer names the reason when the text is xymonapi's own, as
+"XYMONRRDS is not set"; a program's error text, which can hold paths and
+settings, goes to the log instead, and the answer says so.
+
 xymonapi speaks plain HTTP. To reach it from other machines over HTTPS, keep
 it on 127.0.0.1 and put a web server in front of it, as for the CGI programs.
 
-It answers one request at a time.
+Requests are served from a thread pool: a slow one holds up itself alone.
 
 .SH "SEE ALSO"
 xymonlaunch(8), tasks.cfg(5), xymonserver.cfg(5), xymon(1), showgraph.cgi(1),

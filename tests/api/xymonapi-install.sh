@@ -56,4 +56,16 @@ cp "$work/enabled" "$task"
 cmp -s "$work/enabled" "$task" \
 	|| fail "a second install changed the task file the admin had enabled: $(cat "$task")"
 
-pass "make install puts the API in ext/xymonapi/ with a disabled task, and a reinstall keeps an enabled one"
+# A server directory with a space, an & and a | in its name: the paths are
+# quoted, and the replacement sed makes in the task files is escaped.
+odd="$work/x y&z|w"
+"$make" -C "$ROOT" install XYMONHOME="$odd" MANDIR="$work/man 2" >"$work/odd.log" 2>&1 \
+	|| fail "make install into a directory with a space, & and | failed: $(tail -n 5 "$work/odd.log")"
+assert_file_exists "$odd/ext/xymonapi/xymonapi.sh"
+assert_file_exists "$work/man 2/man8/xymonapi.8"
+grep -qF "ENVFILE $odd/etc/xymonserver.cfg" "$odd/etc/tasks.d/xymonapi" \
+	|| fail "the task file does not name that directory as it is: $(grep ENVFILE "$odd/etc/tasks.d/xymonapi")"
+grep -qF "ENVFILE $odd/etc/xymonserver.cfg" "$odd/etc/tasks.d/xymonapi-rag" \
+	|| fail "the index task file does not name that directory as it is: $(grep ENVFILE "$odd/etc/tasks.d/xymonapi-rag")"
+
+pass "make install puts the API in ext/xymonapi/ with disabled tasks, keeps an enabled one, and takes a directory with a space, & and | in its name"

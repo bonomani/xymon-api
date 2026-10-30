@@ -10,6 +10,10 @@
 # XYMONSERVERCGIURL needs no XYMONWEBHOST; a path without one is a 502 that
 # names the missing setting, not a stack trace.
 #
+# What comes back must be a PNG: showgraph.cgi answers an error as HTML with
+# status 200, and that is a 502, not an image. And a graph that takes long
+# holds up its own request alone: /health answers meanwhile.
+#
 # The web server is tests/lib/fake-showgraph.py, which records the request
 # and answers a PNG. Skips where the API cannot run (tests/lib/xymonapi.sh).
 # Needs the xymon client of the Xymon tree in XYMON_SRC (for a free port)
@@ -56,6 +60,20 @@ assert_contains 'service=conn' "$req" "and the test"
 assert_contains 'graph_start=1699999800' "$req" "from the time asked"
 assert_contains 'graph_end=1700000700' "$req" "to the time asked"
 assert_contains 'action=view' "$req" "as a view"
+
+assert_equal "502" "$(graph 'entity=html.example.com&test=conn')" "an HTML page from showgraph"
+assert_contains 'did not answer with a PNG' "$(cat "$work/graph")" "is refused, and the answer says why"
+
+# A graph that takes five seconds, and /health asked one second into it.
+graph 'entity=slow.example.com&test=conn' > "$work/slow.code" &
+SLOW_PID=$!
+sleep 1
+began=$(date +%s)
+assert_contains '"alive"' "$(api_get /health)" "/health answers while a graph is being drawn"
+took=$(( $(date +%s) - began ))
+[ "$took" -lt 3 ] || fail "/health took $took seconds while a graph was being drawn: the handlers block each other"
+wait "$SLOW_PID"
+assert_equal "200" "$(cat "$work/slow.code")" "and the slow graph itself still arrives"
 stop_process "$API_PID"; API_PID=""
 
 # 2. An absolute XYMONSERVERCGIURL stands alone.
@@ -72,4 +90,4 @@ start_api
 assert_equal "502" "$(graph 'entity=web.example.com&test=conn')" "/graphs with a path and no XYMONWEBHOST"
 assert_contains 'XYMONWEBHOST' "$(cat "$work/graph")" "and the answer names the missing setting"
 
-pass "/graphs reaches showgraph.sh through XYMONWEBHOST when XYMONSERVERCGIURL is a path, as xymonserver.cfg ships it"
+pass "/graphs reaches showgraph.sh through XYMONWEBHOST, serves only a PNG, and a slow graph does not hold up /health"

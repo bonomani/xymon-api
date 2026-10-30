@@ -39,14 +39,26 @@ BOARD_FIELDS = ["hostname", "testname", "color", "lastchange"]
 # own separator). Host and test names in Xymon never do.
 _NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.,-]*")
 _DSNAME = re.compile(r"[A-Za-z0-9_]{1,19}")
-_RELATIVE = re.compile(r"-([0-9]+)([smhdw])")
+# Bounded: int() refuses thousands of digits with a ValueError of its own
+# (Python 3.11+), and nothing in Xymon is older than 1970 or past 12 digits.
+_RELATIVE = re.compile(r"-([0-9]{1,9})([smhdw])")
 # [0-9], not str.isdigit(), which also takes "²" -- which int() then refuses.
-_DIGITS = re.compile(r"[0-9]+")
+_DIGITS = re.compile(r"[0-9]{1,12}")
 _UNIT = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
 class BadRequest(ValueError):
-    """A request parameter the API will not pass on."""
+    """A request parameter the API will not pass on: 400."""
+
+
+class NotFound(LookupError):
+    """What was asked for is not there: 404. Not FileNotFoundError, which a
+    subprocess raises too when its program is missing -- that is a 502."""
+
+
+class Upstream(RuntimeError):
+    """A failure whose text is this module's own and safe to answer with:
+    502. Any other exception is a 502 too, but its text stays in the log."""
 
 # A verdict, never a colour: the colour is how the web pages show it.
 COLOUR_STATUS = {"green": "ok", "yellow": "warning", "red": "critical",
@@ -59,7 +71,7 @@ def query(request: str) -> str:
     out = subprocess.run([XYMON, XYMSRV, request],
                          capture_output=True, text=True, timeout=30)
     if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip() or f"xymon {XYMSRV} failed")
+        raise Upstream(out.stderr.strip() or f"xymon {XYMSRV} failed")
     return out.stdout
 
 
@@ -157,17 +169,22 @@ def series(entity: str | None, test: str | None, metric: str | None,
     if not _DSNAME.fullmatch(ds):
         raise BadRequest("metric must be an RRD dataset name")
     start, end = epoch(frm), epoch(to)
+    if start > end:
+        raise BadRequest("from must not be after to")
     if not XYMONRRDS:
-        raise RuntimeError("XYMONRRDS is not set")
+        raise Upstream("XYMONRRDS is not set")
     rrd = os.path.join(XYMONRRDS, host, f"{tst}.rrd")
     if not os.path.isfile(rrd):
-        raise FileNotFoundError(f"no RRD file for {host} {tst}")
+        raise NotFound(f"no RRD file for {host} {tst}")
     out = subprocess.run(["rrdtool", "xport", "--json", "--start", str(start),
                           "--end", str(end), f"DEF:v={rrd}:{ds}:AVERAGE",
                           "XPORT:v:v"],
                          capture_output=True, text=True, timeout=30)
     if out.returncode != 0:
-        raise RuntimeError(out.stderr.strip() or "rrdtool xport failed")
+        err = out.stderr.strip()
+        if "No DS called" in err:         # rrdtool's words for a dataset the file has not
+            raise NotFound(f"no dataset {ds} in {tst}.rrd of {host}")
+        raise Upstream(err or "rrdtool xport failed")
     doc = json.loads(out.stdout)
     meta = doc.get("meta", {})
     first, step = int(meta.get("start", 0)), int(meta.get("step", 1) or 1)
@@ -183,18 +200,29 @@ def graph(entity: str | None, test: str | None, frm: str, to: str) -> bytes:
                    "graph_start": epoch(frm), "graph_end": epoch(to),
                    "action": "view"})
     if not XYMONSERVERCGIURL:
-        raise RuntimeError("XYMONSERVERCGIURL is not set")
+        raise Upstream("XYMONSERVERCGIURL is not set")
     # xymonserver.cfg gives XYMONSERVERCGIURL as a path, "/xymon-cgi": the
     # web pages use it relative to themselves. A URL needs the host, which
     # XYMONWEBHOST holds ("http://www.foo.com"), as Xymon's own pages do.
     url = XYMONSERVERCGIURL
     if "://" not in url:
         if not XYMONWEBHOST:
-            raise RuntimeError("XYMONSERVERCGIURL is a path and XYMONWEBHOST is not set")
+            raise Upstream("XYMONSERVERCGIURL is a path and XYMONWEBHOST is not set")
         url = XYMONWEBHOST.rstrip("/") + "/" + url.lstrip("/")
     with urllib.request.urlopen(f"{url}/showgraph.sh?{q}", timeout=30) as r:
-        return r.read()
+        png = r.read(_GRAPH_MAX + 1)
+    # What came back is served as a PNG, so it must be one: showgraph.cgi
+    # answers an error as HTML, with status 200.
+    if not png.startswith(_PNG):
+        raise Upstream(f"showgraph.sh at {url} did not answer with a PNG")
+    if len(png) > _GRAPH_MAX:
+        raise Upstream(f"showgraph.sh at {url} answered more than {_GRAPH_MAX} bytes")
+    return png
 
+
+
+_PNG = b"\x89PNG\r\n\x1a\n"
+_GRAPH_MAX = 8 * 1024 * 1024
 
 
 # --- History -------------------------------------------------------------------
@@ -219,11 +247,11 @@ def events(entity: str | None, test: str | None, since: str | None,
     if not 1 <= n <= 1000:
         raise BadRequest("limit must be a number from 1 to 1000")
     if not XYMONHISTDIR:
-        raise RuntimeError("XYMONHISTDIR is not set")
+        raise Upstream("XYMONHISTDIR is not set")
     # The directory must be there; only allevents may not be yet. A missing
     # directory is a wrong setting, and an empty history would hide it.
     if not os.path.isdir(XYMONHISTDIR):
-        raise RuntimeError(f"XYMONHISTDIR={XYMONHISTDIR} is not a directory")
+        raise Upstream(f"XYMONHISTDIR={XYMONHISTDIR} is not a directory")
     path = os.path.join(XYMONHISTDIR, "allevents")
     if not os.path.isfile(path):
         return []                       # nothing has changed colour yet
@@ -251,7 +279,7 @@ def histlog(entity: str | None, test: str | None, when: str | None) -> dict:
     if not when or not _DIGITS.fullmatch(when):
         raise BadRequest("time must be seconds since the epoch")
     if not XYMONHISTLOGS:
-        raise RuntimeError("XYMONHISTLOGS is not set")
+        raise Upstream("XYMONHISTLOGS is not set")
     try:
         t = time.localtime(int(when))
     except (OverflowError, OSError, ValueError) as e:
@@ -259,7 +287,7 @@ def histlog(entity: str | None, test: str | None, when: str | None) -> dict:
     name = time.strftime(f"%a_%b_{t.tm_mday}_%H:%M:%S_%Y", t)
     path = os.path.join(XYMONHISTLOGS, host.replace(".", "_"), tst, name)
     if not os.path.isfile(path):
-        raise FileNotFoundError(f"no saved status for {host} {tst} at {when}")
+        raise NotFound(f"no saved status for {host} {tst} at {when}")
     # Bytes, then text: the limit is on what is read from disk, 1 MiB, not on
     # characters, of which 1 MiB could be four times as much.
     with open(path, "rb") as fd:

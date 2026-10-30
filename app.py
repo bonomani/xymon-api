@@ -9,6 +9,7 @@ Started by xymonapi.sh, which checks Python and the modules first.
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import sys
@@ -16,35 +17,53 @@ from pathlib import Path
 
 import yaml
 from fastapi import FastAPI
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
 import xymon
+
+# To stderr, which the task's LOGFILE collects: $XYMONSERVERLOGS/xymonapi.log.
+logging.basicConfig(stream=sys.stderr, level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("xymonapi")
 
 SPEC_PATH = Path(__file__).resolve().parent / "openapi.yaml"
 
 
 def _upstream(exc: Exception) -> JSONResponse:
-    return JSONResponse({"error": "upstream", "detail": str(exc)}, status_code=502)
+    """502. xymon.Upstream carries a text of this program's own; anything
+    else -- a program's stderr, a traceback -- names paths and settings a
+    stranger need not see, so it goes to the log and the answer says where."""
+    if isinstance(exc, xymon.Upstream):
+        return JSONResponse({"error": "upstream", "detail": str(exc)}, status_code=502)
+    log.error("%s: %s", type(exc).__name__, exc)
+    return JSONResponse({"error": "upstream",
+                         "detail": "the server could not answer; the reason is in xymonapi.log"},
+                        status_code=502)
 
 
 def _refused(exc: Exception) -> JSONResponse:
     """The answer for an exception: 400, 404 or 502."""
     if isinstance(exc, xymon.BadRequest):
         return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
-    if isinstance(exc, FileNotFoundError):
+    if isinstance(exc, xymon.NotFound):
         return JSONResponse({"error": "not_found", "detail": str(exc)}, status_code=404)
     return _upstream(exc)
 
 
-async def _health(request):
+# The handlers are plain functions, not coroutines: Starlette runs them in
+# its thread pool, so a slow xymond, rrdtool or showgraph holds up that one
+# request and not the event loop -- /health keeps answering meanwhile.
+def _health(request):
     try:
         version = xymon.ping()
-    except Exception:                               # noqa: BLE001
+    except Exception as exc:                        # noqa: BLE001
+        log.warning("ping: %s: %s", type(exc).__name__, exc)
         return JSONResponse({"alive": False})
     return JSONResponse({"alive": True, "server_version": version})
 
 
-async def _states(request):
+def _states(request):
     q = request.query_params
     try:
         items = xymon.states(q.get("entity"), q.get("test"), q.get("verdict"))
@@ -53,7 +72,7 @@ async def _states(request):
     return JSONResponse({"items": items})
 
 
-async def _alarms(request):
+def _alarms(request):
     try:
         items = xymon.alarms()
     except Exception as exc:                        # noqa: BLE001
@@ -61,7 +80,7 @@ async def _alarms(request):
     return JSONResponse({"items": items})
 
 
-async def _entities(request):
+def _entities(request):
     try:
         items = xymon.entities()
     except Exception as exc:                        # noqa: BLE001
@@ -69,7 +88,7 @@ async def _entities(request):
     return JSONResponse({"items": items})
 
 
-async def _series(request):
+def _series(request):
     q = request.query_params
     try:
         s = xymon.series(q.get("entity"), q.get("test"), q.get("metric"),
@@ -79,7 +98,7 @@ async def _series(request):
     return JSONResponse({"series": [s]})
 
 
-async def _graphs(request):
+def _graphs(request):
     q = request.query_params
     try:
         png = xymon.graph(q.get("entity"), q.get("test"),
@@ -89,11 +108,7 @@ async def _graphs(request):
     return Response(content=png, media_type="image/png")
 
 
-# The handlers call xymon, rrdtool and htpasswd and wait for them, so the
-# server answers one request at a time. That is enough for a read-only API on
-# the Xymon server itself; run them with starlette's run_in_threadpool if it
-# is ever not.
-async def _events(request):
+def _events(request):
     q = request.query_params
     try:
         items = xymon.events(q.get("entity"), q.get("test"), q.get("since"), q.get("limit"))
@@ -102,7 +117,7 @@ async def _events(request):
     return JSONResponse({"items": items})
 
 
-async def _histlog(request):
+def _histlog(request):
     q = request.query_params
     try:
         log = xymon.histlog(q.get("entity"), q.get("test"), q.get("time"))
@@ -146,7 +161,8 @@ def build_app() -> FastAPI:
         @app.middleware("http")
         async def _basic_auth(request, call_next):
             creds = xymon.parse_basic(request.headers.get("authorization"))
-            if not creds or not xymon.verify_basic(*creds):
+            # htpasswd checks a bcrypt hash in tens of milliseconds: off the loop.
+            if not creds or not await run_in_threadpool(xymon.verify_basic, *creds):
                 return JSONResponse(
                     {"error": "unauthorized", "detail": "a user and password are needed"},
                     status_code=401,

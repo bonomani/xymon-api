@@ -50,9 +50,32 @@ assert_equal "400" "$(api_code '/series?entity=host.example.com&test=la:x&metric
 assert_equal "400" "$(api_code '/series?entity=host.example.com&test=la&metric=l:a')" "a metric name with a colon"
 assert_equal "400" "$(api_code '/series?entity=host.example.com&test=la&metric=la&from=yesterday')" "a time that is not now, a number or like -24h"
 assert_equal "404" "$(api_code '/series?entity=host.example.com&test=disk&metric=la')" "an RRD file that does not exist"
+assert_equal "404" "$(api_code '/series?entity=host.example.com&test=la&metric=nope')" "a dataset the RRD file does not hold"
+assert_contains 'no dataset nope' "$(api_get '/series?entity=host.example.com&test=la&metric=nope')" "and the answer names it"
+assert_equal "400" "$(api_code "/series?entity=host.example.com&test=la&metric=la&from=$((t0 + 900))&to=$t0")" "from after to"
+# Numbers no clock can mean: thousands of digits, which int() itself refuses
+# on Python 3.11+, and a relative time of a billion weeks.
+long=$(printf '1%.0s' $(seq 1 5000))
+assert_equal "400" "$(api_code "/series?entity=host.example.com&test=la&metric=la&from=$long")" "a time of 5000 digits"
+assert_equal "400" "$(api_code '/series?entity=host.example.com&test=la&metric=la&from=-1000000000w')" "a relative time of ten digits"
 
 # /graphs checks the same names before it asks showgraph, so this needs no
-# web server. What showgraph then draws is not tested here.
+# web server. What showgraph then draws is xymonapi-graphs.sh's business.
 assert_equal "400" "$(api_code '/graphs?entity=../host.example.com&test=la')" "/graphs, a host name with ../"
 
-pass "/series reads the RRD values asked for, and /series and /graphs refuse names that leave XYMONRRDS"
+# rrdtool missing is the server's problem, a 502, not a 404 as if the RRD
+# file were not there -- subprocess raises FileNotFoundError for both. The
+# answer does not say what went wrong; the log does.
+stop_process "$API_PID"; API_PID=""
+# A PATH with everything the launcher and this test use, and no rrdtool.
+mkdir -p "$work/nobin"
+for t in sh bash dirname sed cat tail head grep curl date sleep od tr python3; do
+	p=$(command -v "$t") && ln -s "$p" "$work/nobin/$t"
+done
+PATH="$work/nobin" start_api
+assert_equal "502" "$(api_code '/series?entity=host.example.com&test=la&metric=la')" "/series with no rrdtool on PATH"
+assert_contains 'xymonapi.log' "$(api_get '/series?entity=host.example.com&test=la&metric=la')" "and the answer points at the log"
+assert_not_contains "$work" "$(api_get '/series?entity=host.example.com&test=la&metric=la')" "and holds no path of the server's"
+assert_contains 'rrdtool' "$(cat "$work/api.log")" "which says what was missing"
+
+pass "/series reads the RRD values asked for, answers 404 for a missing file or dataset, 400 for bad times, and refuses names that leave XYMONRRDS"
