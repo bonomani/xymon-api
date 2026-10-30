@@ -337,12 +337,24 @@ def search(question: str, kind: str | None = None, k: int = 5, remote: bool = Tr
         raise ValueError(f"kind must be one of {', '.join(KINDS)}")
     if not INDEX.is_file() and remote:
         return _search_remote(question, kind, k)
-    import numpy as np
-    vectors, passages, _model, _built = _load()
+    try:
+        import numpy as np
+        vectors, passages, _model, _built = _load()
+    except ImportError:
+        # An index here, but not the modules to read it -- a laptop whose
+        # cache kept one from before: the API's index then.
+        if not remote:
+            raise
+        return _search_remote(question, kind, k)
     keep = [i for i, p in enumerate(passages) if kind is None or p["kind"] == kind]
     if not keep:
         return []
-    scores = vectors[keep] @ embed([question], query=True)[0]
+    try:
+        scores = vectors[keep] @ embed([question], query=True)[0]
+    except ImportError:
+        if not remote:
+            raise
+        return _search_remote(question, kind, k)
     best = np.argsort(-scores)[:k]
     return [dict(passages[keep[i]], score=round(float(scores[i]), 3)) for i in best]
 

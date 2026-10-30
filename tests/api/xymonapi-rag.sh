@@ -129,6 +129,16 @@ XYMONAPI_RAG_INDEX="$work/none.npz" XYMONAPI_URL="http://127.0.0.1:1" rag search
 assert_contains 'no index at' "$(cat "$work/rag.err")" "and with no API either it says so"
 assert_contains 'could not search either' "$(cat "$work/rag.err")" "naming both"
 
+# An index here but no numpy to read it -- a laptop with a cache from
+# before -- asks the API too. A numpy that will not import stands in.
+mkdir -p "$work/nonumpy/numpy"
+printf 'raise ImportError("no numpy here", name="numpy")\n' > "$work/nonumpy/numpy/__init__.py"
+assert_contains 'alerts.cfg.5 -- RULES' "$(PYTHONPATH="$work/nonumpy" rag search -k 1 --kind docs 'how long must a problem last before an alert is sent' | grep '"title"' | head -n 1)" "search with an index but no numpy uses the API's"
+rc=0
+PYTHONPATH="$work/nonumpy" rag index > /dev/null || rc=$?
+assert_equal "77" "$rc" "index without numpy exits 77"
+assert_contains 'missing Python module: numpy' "$(cat "$work/rag.err")" "and names it"
+
 # eval: a file of questions with the title each should find, and a score.
 printf '[{"question":"how long must a problem last before an alert is sent","kind":"docs","expect":"alerts.cfg.5 -- RULES"},\n{"question":"HTTP 500 error on the login page","kind":"history","expect":"web.example.com http"},\n{"question":"zebra crossing stripes","kind":"docs","expect":"zebra.1"}]\n' > "$work/eval.json"
 rc=0
