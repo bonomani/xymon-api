@@ -280,8 +280,15 @@ def ask(question: str, k: int = 5) -> str:
                              f"more than {LLM_MAX} bytes")
         return json.loads(answer)["choices"][0]["message"]["content"]
     except urllib.error.HTTPError as e:
-        raise SystemExit(f"xymonapi-rag: the language model at {LLM_URL} answered "
-                         f"{e.code}" + (": a redirect, which is not followed" if e.code in (301, 302, 303, 307, 308) else "")) from e
+        why = ""
+        if e.code in (301, 302, 303, 307, 308):
+            why = ": a redirect, which is not followed"
+        elif e.code == 404:
+            # Ollama answers 404 for a model it has not pulled; the default
+            # model is not on every machine.
+            why = (f": it has no model named {LLM_MODEL} (XYMONAPI_RAG_LLM_MODEL); "
+                   f"with Ollama, run: ollama pull {LLM_MODEL}")
+        raise SystemExit(f"xymonapi-rag: the language model at {LLM_URL} answered {e.code}{why}") from e
     except urllib.error.URLError as e:
         raise SystemExit(f"xymonapi-rag: no language model at {LLM_URL}: {e}") from e
     except (ValueError, KeyError, IndexError, TypeError) as e:

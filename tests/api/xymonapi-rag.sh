@@ -128,6 +128,14 @@ XYMONAPI_RAG_LLM_URL="http://127.0.0.1:1/v1" rag ask 'a full disk' > /dev/null |
 [ "$rc" -ne 0 ] || fail "ask with no language model succeeded"
 assert_contains 'no language model at' "$(cat "$work/rag.err")" "and says why"
 
+# A model the server has not got: Ollama answers 404. The message names the
+# model and how to get it.
+rc=0
+XYMONAPI_RAG_LLM_MODEL=no-such-model rag ask 'a full disk' > /dev/null || rc=$?
+[ "$rc" -ne 0 ] || fail "ask with a model the server has not got succeeded"
+assert_contains 'answered 404: it has no model named no-such-model' "$(cat "$work/rag.err")" "a 404 from the model server names the model"
+assert_contains 'ollama pull no-such-model' "$(cat "$work/rag.err")" "and says how to pull it"
+
 # A model that redirects: the bearer key must not follow to the host named.
 # TARGET records whatever reaches it; REDIRECT answers 302 to TARGET.
 "${XYMONAPI_PYTHON:-python3}" "$ROOT/tests/lib/fake-llm.py" "$work/target.port" "$work/target.req" &

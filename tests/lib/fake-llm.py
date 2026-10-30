@@ -6,8 +6,10 @@ OpenAI-compatible API, for xymonapi-rag ask, or a server that redirects.
 
 Listens on a free port on 127.0.0.1 and writes it to PORTFILE. Every request
 is written to RECORD -- its Authorization header, then its body. A POST to
-/v1/chat/completions is answered with the fixed text FAKE ANSWER. With
-REDIRECT, a URL, every request is answered 302 to it instead.
+/v1/chat/completions is answered with the fixed text FAKE ANSWER, unless it
+names the model no-such-model, which is answered 404 as Ollama answers for a
+model it has not pulled. With REDIRECT, a URL, every request is answered 302
+to it instead.
 """
 import http.server
 import json
@@ -32,7 +34,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        if self.path != "/v1/chat/completions":
+        if self.path != "/v1/chat/completions" or b'"model": "no-such-model"' in body \
+                or b'"model":"no-such-model"' in body:
             self.send_error(404)
             return
         answer = json.dumps({"choices": [{"message": {"role": "assistant",

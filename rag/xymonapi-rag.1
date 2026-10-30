@@ -92,7 +92,9 @@ http://127.0.0.1:11434/v1, is a local Ollama: no key, no cost. A redirect
 from it is an error, not followed: the key below would go to the host it
 names.
 .IP "\fBXYMONAPI_RAG_LLM_MODEL\fR"
-The model ask names, llama3.1 by default.
+The model ask names, llama3.1 by default. A server that has not got it
+answers 404, and ask says so, naming the model: with Ollama, \fBollama pull
+\fIMODEL\fR gets it.
 .IP "\fBXYMONAPI_RAG_LLM_KEY\fR"
 Sent as a bearer token when set, for a hosted model that needs a key.
 .IP "\fBXYMONAPI_URL\fR, \fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR, \fBXYMONAPI_PASSWORD_FILE\fR"

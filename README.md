@@ -160,6 +160,7 @@ XYMONAPI_URL="http://127.0.0.1:1986"
 XYMONAPI_USER="me"
 XYMONAPI_PASSWORD_FILE="/opt/homebrew/etc/xymon-preview/xymonapi.password"
 XYMONAPI_RAG_DOCS="/opt/homebrew/opt/xymon-server-preview/share/man"
+XYMONAPI_RAG_LLM_MODEL="llama3.2"   # the model this Ollama has pulled
 ```
 
 ## MCP server
