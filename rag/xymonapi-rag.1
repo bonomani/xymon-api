@@ -1,12 +1,14 @@
-.TH XYMONAPI-RAG 1 "October 29, 2026" "xymon-api"
+.TH XYMONAPI-RAG 1 "October 30, 2026" "xymon-api"
 .SH NAME
 xymonapi-rag \- search Xymon's manual pages and history by meaning
 .SH SYNOPSIS
-.B "rag/xymonapi-rag.sh index [--no-history]"
+.B "rag/xymonapi-rag.sh index [--no-history] [--full]"
 .br
 .B "rag/xymonapi-rag.sh search [--kind docs|history] [-k N] QUESTION"
 .br
 .B "rag/xymonapi-rag.sh ask [-k N] QUESTION"
+.br
+.B "rag/xymonapi-rag.sh eval [-k N] [--min HITS] FILE"
 
 .SH DESCRIPTION
 xymonapi-rag finds the passages of Xymon's manual pages, and of its history,
@@ -19,9 +21,13 @@ the colour changes since $XYMONAPI_RAG_SINCE with the status text saved at
 each -- page by page, the newest $XYMONAPI_RAG_MAX_HISTORY of them at most;
 cuts them into passages, one per manual-page
 section or item and one per change; and stores a vector for each in
-$XYMONAPI_RAG_INDEX, replacing what was there. Run it again to take in what
-has changed since: the task \fBtasks.d/xymonapi-rag\fR, which make install
-writes DISABLED, does so once a day. To run it, remove that line and put
+$XYMONAPI_RAG_INDEX. A passage the index holds already keeps its vector, and
+a change it holds has its text not fetched again, so a run that adds a
+day's changes takes seconds; \fB--full\fR embeds everything again. Run it
+to take in what has changed: the task \fBtasks.d/xymonapi-rag\fR, which
+make install writes DISABLED, does so once a day, and
+.I xymonapi(8)
+reads the new index at once. To run it, remove that line and put
 XYMONAPI_RAG_DOCS -- and XYMONAPI_USER and XYMONAPI_PASSWORD when the API
 asks for them -- in a file under xymonserver.d/ that only the Xymon user
 can read. When
@@ -31,12 +37,23 @@ API that does not answer yet, as at start-up when the task runs before
 xymonapi listens, is tried again for about a minute first.
 \fB--no-history\fR reads the manual pages only.
 .IP "\fBsearch\fR"
-Prints, as JSON, the N passages nearest QUESTION (5 by default), each with
-its kind, the page, section and item or the host, test and time it comes
-from, and its score. \fB--kind\fR keeps to manual pages or history.
+Prints, as JSON, the N passages nearest QUESTION (5 by default, 20 at most),
+each with its kind, the page, section and item or the host, test and time it
+comes from, and its score. \fB--kind\fR keeps to manual pages or history.
+Where there is no index -- a laptop -- it asks the API's /search instead,
+which reads the index on the Xymon server: then neither the manual pages
+nor the embedding model are needed here.
 .IP "\fBask\fR"
-Gives the N passages nearest QUESTION, and the question, to a language model
-that speaks the OpenAI-compatible API, and prints its answer.
+Gives the N passages nearest QUESTION, found as search finds them, and the
+question, to a language model that speaks the OpenAI-compatible API, and
+prints its answer.
+.IP "\fBeval\fR"
+Asks every question of FILE, a JSON list of objects with a "question", the
+"kind" to search and the text its "expect"ed passage's title holds, and
+prints one line per question and the score: how many found their passage
+among the first N (3 by default). With \fB--min\fR it exits 1 below that
+many hits, for a test. tests/eval/docs.json is such a file for Xymon's own
+manual pages.
 .LP
 The vectors come from a small embedding model, run on this machine by the
 Python module fastembed; it is downloaded once, about 65 MB, the first time
@@ -49,8 +66,10 @@ search_history tools of
 whose own model then writes the answer: with a Claude subscription, ask is
 not needed.
 
-It needs Python 3.10 or later with the modules in rag/requirements.txt; when
-one is missing it says so and exits with status 77.
+It needs Python 3.10 or later, and, to index or to search an index here,
+the modules in rag/requirements.txt; when one is missing it says so and
+exits with status 77. \fBmake install-client\fR puts it under a PREFIX of
+yours, as the command xymonapi-rag.
 
 .SH SECURITY
 A history passage holds a status text, which the monitored host wrote: a

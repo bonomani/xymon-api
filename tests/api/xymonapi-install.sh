@@ -8,7 +8,10 @@
 # ENVFILE naming that server's xymonserver.cfg. An install over one where the
 # admin enabled the task leaves that file alone: putting DISABLED back would
 # stop the API at the next upgrade, with nothing to say why. Without
-# XYMONHOME it installs nothing and says so.
+# XYMONHOME it installs nothing and says so. The Apache snippet goes to
+# $XYMONHOME/etc, kept too once there. make install-client puts the MCP
+# server and the search commands under PREFIX, with two commands in bin
+# that run them from there.
 #
 # Installed into a scratch directory. No Python is needed: the API is copied,
 # not run. Uses the test helpers of the Xymon tree in XYMON_SRC.
@@ -68,4 +71,33 @@ grep -qF "ENVFILE $odd/etc/xymonserver.cfg" "$odd/etc/tasks.d/xymonapi" \
 grep -qF "ENVFILE $odd/etc/xymonserver.cfg" "$odd/etc/tasks.d/xymonapi-rag" \
 	|| fail "the index task file does not name that directory as it is: $(grep ENVFILE "$odd/etc/tasks.d/xymonapi-rag")"
 
-pass "make install puts the API in ext/xymonapi/ with disabled tasks, keeps an enabled one, and takes a directory with a space, & and | in its name"
+assert_file_exists "$home/etc/xymonapi-apache.conf"
+grep -q 'ProxyPass ' "$home/etc/xymonapi-apache.conf" || fail "the Apache snippet has no ProxyPass"
+echo "# mine" > "$home/etc/xymonapi-apache.conf"
+"$make" -C "$ROOT" install XYMONHOME="$home" MANDIR="$work/man" >/dev/null 2>&1 || fail "a third install failed"
+assert_equal "# mine" "$(cat "$home/etc/xymonapi-apache.conf")" "an edited Apache snippet is kept"
+
+# The client side: no Xymon here, PREFIX with a space in its name.
+prefix="$work/client prefix"
+"$make" -C "$ROOT" install-client PREFIX="$prefix" >"$work/client.log" 2>&1 \
+	|| fail "make install-client failed: $(tail -n 5 "$work/client.log")"
+for f in mcp-server/server.py mcp-server/client.py mcp-server/xymonapi-mcp.sh mcp-server/requirements.txt \
+         rag/xymonrag.py rag/xymonapi-rag.sh rag/requirements.txt; do
+	assert_file_exists "$prefix/libexec/xymonapi/$f"
+done
+assert_file_exists "$prefix/share/man/man1/xymonapi-mcp.1"
+assert_file_exists "$prefix/share/man/man1/xymonapi-rag.1"
+[ -x "$prefix/bin/xymonapi-mcp" ] || fail "bin/xymonapi-mcp is not executable"
+[ -x "$prefix/bin/xymonapi-rag" ] || fail "bin/xymonapi-rag is not executable"
+grep -qF "\"$prefix/libexec/xymonapi/rag/xymonapi-rag.sh\"" "$prefix/bin/xymonapi-rag" \
+	|| fail "bin/xymonapi-rag does not run the installed launcher, quoted: $(cat "$prefix/bin/xymonapi-rag")"
+[ -e "$prefix/libexec/xymonapi/app.py" ] && fail "install-client installed the API"
+# The installed xymonapi-rag runs: --help needs Python alone, and finds
+# client.py beside rag/ as in the repository.
+if command -v "${XYMONAPI_PYTHON:-python3}" >/dev/null 2>&1; then
+	XYMONAPI_PYTHON="${XYMONAPI_PYTHON:-python3}" "$prefix/bin/xymonapi-rag" --help > "$work/help.out" 2>&1 \
+		|| fail "the installed xymonapi-rag --help failed: $(cat "$work/help.out")"
+	assert_contains 'search' "$(cat "$work/help.out")" "and names its commands"
+fi
+
+pass "make install puts the API in ext/xymonapi/ with disabled tasks and the Apache snippet, keeps what the admin edited, takes odd directory names, and install-client lays out the client side"

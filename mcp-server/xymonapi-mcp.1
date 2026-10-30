@@ -1,4 +1,4 @@
-.TH XYMONAPI-MCP 1 "October 29, 2026" "xymon-api"
+.TH XYMONAPI-MCP 1 "October 30, 2026" "xymon-api"
 .SH NAME
 xymonapi-mcp \- MCP server for the Xymon API
 .SH SYNOPSIS
@@ -14,9 +14,11 @@ so the client gets what the API answers at that moment: nothing is stored,
 and nothing in Xymon is changed. Every tool is marked read-only.
 
 It runs where the client runs, which need not be the Xymon server, and needs
-Python 3.10 or later with the module mcp (mcp-server/requirements.txt). When
-either is missing it says so on stderr and exits with status 77. It writes
-nothing but protocol messages on stdout.
+Python 3.10 or later with the module mcp (mcp-server/requirements.txt) and
+nothing else: the searches too are the API's. When either is missing it
+says so on stderr and exits with status 77. It writes nothing but protocol
+messages on stdout. \fBmake install-client\fR puts it under a PREFIX of
+yours, as the command xymonapi-mcp.
 
 .SH TOOLS
 .IP "\fBhealth\fR"
@@ -27,6 +29,8 @@ The status board, one state per host and test.
 Every state whose verdict is not ok.
 .IP "\fBentities\fR"
 Each host on the board, once.
+.IP "\fBstatus\fR entity test"
+The current status of one host's test, with its text.
 .IP "\fBseries\fR entity test [metric] [start] [end]"
 The values of one dataset of a host's RRD file over a time range.
 .IP "\fBsearch_docs\fR question [k]"
@@ -35,12 +39,13 @@ The passages of Xymon's manual pages nearest the question, by meaning.
 The past colour changes nearest the question, with the status text saved at
 each.
 .LP
-The first five answer what the xymonapi(8) operation of the same name
-answers; that page says what each field means. The two searches are those of
-.I xymonapi-rag(1),
-in its index, and need its modules; the other tools do not. An API that
-cannot be reached, or that refuses a request, is a tool error whose text
-says which, as is a search with no index.
+The first six answer what the xymonapi(8) operation of the same name
+answers; the two searches its /search, from the index that
+.I xymonapi-rag(1)
+builds on the Xymon server. That page says what each field means. An API
+that cannot be reached, or that refuses a request, is a tool error whose
+text says which, and what to check first; so is a search on a server with
+no index.
 
 .SH SECURITY
 search_history returns status texts that the monitored hosts wrote, each
@@ -64,9 +69,6 @@ names instead, for an environment that other programs see.
 .IP "\fBXYMONAPI_PYTHON\fR"
 The Python to run with, the python3 of a virtualenv that holds mcp for
 instance. The default is python3, found on PATH.
-.LP
-The two searches also read the settings of xymonapi-rag(1), the index
-XYMONAPI_RAG_INDEX among them.
 
 .SH "SEE ALSO"
 xymonapi(8), xymonapi-rag(1)

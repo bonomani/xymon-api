@@ -13,10 +13,15 @@ Its operations, all GET under `/xymon/api/v1`: `/health`, `/states`,
 `/alarms`, `/entities`, `/status` (one test's current status, text and
 acknowledgement included), `/series` (the values of one RRD dataset), `/graphs`
 (the PNG showgraph draws), `/events` (the colour changes, newest first, a
-page at a time) and `/histlog` (the status text saved at one). The manual
-page, [`xymonapi.8`](xymonapi.8), is the specification: every operation,
-every setting, and how to enable it. The OpenAPI description is
+page at a time), `/histlog` (the status text saved at one) and `/search`
+(the manual-page and history passages nearest a question, by meaning). The
+manual page, [`xymonapi.8`](xymonapi.8), is the specification: every
+operation, every setting, and how to enable it. The OpenAPI description is
 [`openapi.yaml`](openapi.yaml), also served by the API at `/openapi.json`.
+
+Two more pieces run where you are, not on the server: an [MCP server](#mcp-server)
+that gives Claude the same operations as tools, and a [search](#search)
+command line. A laptop needs only those, installed with `make install-client`.
 
 ## Requirements
 
@@ -50,6 +55,7 @@ It writes into the Xymon server directory, so it is normally run as root.
 | `$XYMONHOME/etc/tasks.d/xymonapi`, the task, written `DISABLED` | `xymonapi.tasks.DIST`, with `@XYMONHOME@` replaced |
 | `$XYMONHOME/ext/xymonapi/rag/`, the search and its launcher, and `mcp-server/client.py` it reads the API with | `rag/xymonrag.py`, `xymonapi-rag.sh`, `requirements.txt`, `mcp-server/client.py` |
 | `$XYMONHOME/etc/tasks.d/xymonapi-rag`, the daily index task, written `DISABLED` | `rag/xymonapi-rag.tasks.DIST` |
+| `$XYMONHOME/etc/xymonapi-apache.conf`, the proxy snippet for other machines, written once | `xymonapi-apache.conf` |
 | `$MANDIR/man8/xymonapi.8`, `$MANDIR/man1/xymonapi-rag.1` | the pages of the same name |
 
 Xymon's own install links `$XYMONHOME/ext` and `$XYMONHOME/etc` to wherever
@@ -77,6 +83,22 @@ the manual page:
 curl http://127.0.0.1:1986/xymon/api/v1/health
 ```
 
+### On a laptop
+
+Nothing of the above. Clone this repository and run, with a `PREFIX` of
+yours (`~/.local` by default):
+
+```sh
+make install-client
+```
+
+It puts `xymonapi-mcp` and `xymonapi-rag` in `$PREFIX/bin`, the code under
+`$PREFIX/libexec/xymonapi`, the two manual pages under `$PREFIX/share/man`.
+The MCP server needs the module in [`mcp-server/requirements.txt`](mcp-server/requirements.txt);
+`xymonapi-rag search` and `ask` need nothing more, since they use the
+server's index through the API. Then point them at the API, over HTTPS: see
+[Reaching the API from elsewhere](#reaching-the-api-from-elsewhere).
+
 ## Settings
 
 All of them are environment variables. The API's go in a file under
@@ -102,7 +124,32 @@ manual page named.
 | `XYMONAPI_RAG_LLM_MAX_TOKENS`, `_TIMEOUT` | the model's token budget, and how long `ask` waits | `2048`, `300` seconds |
 
 The first three are `xymonapi.8`'s; the next three `xymonapi-mcp.1`'s; the
-rest `xymonapi-rag.1`'s.
+rest `xymonapi-rag.1`'s, and the API reads `XYMONAPI_RAG_INDEX`, `_MODEL`
+and `_OFFLINE` too, for `/search`.
+
+## Reaching the API from elsewhere
+
+The API listens on 127.0.0.1 and speaks plain HTTP, so a password would
+cross the network in the clear. From another machine, either:
+
+- **An SSH tunnel**, for one person: `ssh -L 1986:127.0.0.1:1986 xymon-server`,
+  then `XYMONAPI_URL=http://127.0.0.1:1986` as if local. Nothing to set up
+  on the server.
+- **The web server in front of it**, for everyone: `make install` writes
+  `$XYMONHOME/etc/xymonapi-apache.conf`, a `ProxyPass` of `/xymon/api/` to
+  the API, served over HTTPS only. Include it next to `xymon-apache.conf`,
+  enable `mod_proxy` and `mod_proxy_http`, and set `XYMONAPI_PASSWD` so the
+  API asks for a password. Then `XYMONAPI_URL=https://xymon.example.ch`.
+
+Either way, check from the laptop before anything else:
+
+```sh
+curl -u me https://xymon.example.ch/xymon/api/v1/health
+```
+
+Its `search` field says whether the server has an index, how big, and how
+old. When the MCP server cannot reach the API, or is refused, its error says
+which setting to look at first.
 
 ## Pitfalls seen in practice
 
@@ -168,25 +215,27 @@ XYMONAPI_RAG_LLM_MODEL="llama3.2"   # the model this Ollama has pulled
 
 [`mcp-server/`](mcp-server) gives an AI client that speaks the Model Context
 Protocol -- Claude Desktop, Claude Code -- read-only tools over the API:
-`health`, `states`, `alarms`, `entities`, `status`, `series`, and the two searches of
-the next section, `search_docs` and `search_history`. It runs where the client
-runs, from this checkout, with the Python module in
-[`mcp-server/requirements.txt`](mcp-server/requirements.txt). For Claude Code,
-once, at user scope so every project has it:
+`health`, `states`, `alarms`, `entities`, `status`, `series`, and the two
+searches of the next section, `search_docs` and `search_history`, which ask
+the API's `/search`. It runs where the client runs, from this checkout or
+from `make install-client`, with the Python module in
+[`mcp-server/requirements.txt`](mcp-server/requirements.txt) and nothing
+else. For Claude Code, once, at user scope so every project has it:
 
 ```sh
 claude mcp add --scope user xymon \
-  -e XYMONAPI_URL=http://127.0.0.1:1986 \
+  -e XYMONAPI_URL=https://xymon.example.ch \
   -e XYMONAPI_USER=me -e XYMONAPI_PASSWORD_FILE=/path/to/password \
   -e XYMONAPI_PYTHON=/path/to/python3.12 \
-  -e XYMONAPI_RAG_DOCS=/usr/share/man \
-  -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
+  -- ~/.local/bin/xymonapi-mcp
 ```
 
 Leave out the user and password when the API asks for none -- or pass the
 password itself in `XYMONAPI_PASSWORD`, which then sits in Claude's settings
-file -- and `XYMONAPI_PYTHON` when the system `python3` has the modules. The two searches
-answer a tool error until the index below is built.
+file -- and `XYMONAPI_PYTHON` when the system `python3` has the module. For
+two Xymon servers, register twice under two names, `xymon-prod` and
+`xymon-lab`, each with its own URL and password file. The two searches
+answer a tool error until the server has an index.
 
 For an API on another machine, use HTTPS through a web server in front of
 it, as `xymonapi.8` says: over plain HTTP, a password crosses the network in
@@ -197,28 +246,35 @@ Every tool and setting is in
 
 ## Search
 
-[`rag/`](rag) searches Xymon's manual pages and its history by meaning. It
-needs the modules in [`rag/requirements.txt`](rag/requirements.txt) and the
-same `XYMONAPI_*` variables as above, plus `XYMONAPI_RAG_DOCS`, a directory
-with Xymon's manual pages. Build the index, then try it:
+[`rag/`](rag) searches Xymon's manual pages and its history by meaning. The
+index lives on the Xymon server, where the manual pages and the history
+are: `make install` writes a daily xymonlaunch task, `tasks.d/xymonapi-rag`,
+DISABLED. To enable it, remove the line, install the modules in
+[`rag/requirements.txt`](rag/requirements.txt) for the Xymon user, and put
+`XYMONAPI_RAG_DOCS` (a directory with Xymon's manual pages, `/usr/share/man`
+will do) and, when the API asks for a password, `XYMONAPI_USER` and
+`XYMONAPI_PASSWORD_FILE` in a file under `xymonserver.d/`. The first run
+downloads a 65 MB embedding model, which `XYMONAPI_RAG_OFFLINE` can forbid
+once the cache is seeded, and takes about a minute; the next ones embed only
+what is new and take seconds. The index holds the last 30 days of history,
+the newest 5000 changes at most, and the API serves it at `/search` as soon
+as it is written.
+
+From anywhere with access to the API:
 
 ```sh
-rag/xymonapi-rag.sh index
-rag/xymonapi-rag.sh search "what does purple mean"
+xymonapi-rag search "what does purple mean"
+xymonapi-rag ask "has /boot filled up before, and where?"
 ```
 
-The first run downloads a 65 MB embedding model, which `XYMONAPI_RAG_OFFLINE`
-can forbid on a server without Internet, once the cache is seeded; indexing
-takes about a minute. The index holds the last 30 days of history, the newest
-5000 changes at most, so `make install` also writes a daily xymonlaunch task,
-`tasks.d/xymonapi-rag`, DISABLED: remove the line, and put the variables above
-in a file under `xymonserver.d/`, the password in a file of its own named by
-`XYMONAPI_PASSWORD_FILE`. `ask` hands the passages to a language model
-speaking the OpenAI-compatible API, a local Ollama by default, LM Studio
-with two settings. Pick the model with care: a small one such as `llama3.2`
-answers in a second but makes options up, where a larger one says when the
-passages do not hold the answer. With Claude, the MCP tools are the simpler
-way. Every command and setting is in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
+`search` uses the server's index when there is none here. `ask` hands the
+passages to a language model speaking the OpenAI-compatible API, a local
+Ollama by default, LM Studio with two settings. Pick the model with care: a
+small one such as `llama3.2` answers in a second but makes options up, where
+a larger one says when the passages do not hold the answer. With Claude, the
+MCP tools are the simpler way. `eval` scores the search against a file of
+questions; [`tests/eval/docs.json`](tests/eval/docs.json) is the one CI
+runs. Every command and setting is in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
 
 ## Tests
 
@@ -238,9 +294,10 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
 | `xymonapi-series` | `/series` reads an RRD, an HTTP test's too, answers 404 and 400 as documented, and refuses names that leave `XYMONRRDS` |
 | `xymonapi-graphs` | `/graphs` reaches `showgraph.sh` through `XYMONWEBHOST` when `XYMONSERVERCGIURL` is a path |
-| `xymonapi-install` | `make install` lays out the files and keeps an enabled task |
-| `xymonapi-mcp` | the MCP server's eight tools answer with the API's board, are read-only, and tell the model a status text is data, not instructions |
-| `xymonapi-rag` | the search finds the right manual page and history passage; `ask` reaches a language model |
+| `xymonapi-install` | `make install` lays out the files, the Apache snippet included, keeps what the admin edited; `make install-client` lays out the laptop side |
+| `xymonapi-mcp` | the MCP server's eight tools answer with the API's board, are read-only, tell the model a status text is data, and say what to check when the API is out of reach |
+| `xymonapi-rag` | the search finds the right manual page and history passage, from the index here or the API's; `/search` and `/health` serve the index and see it change; `index` embeds only what is new; `eval` scores; `ask` reaches a language model |
+| `xymonapi-rag-eval` | ten questions about Xymon's own manual pages, all of them, score at least 8 |
 | `xymonapi-rag-startup` | `index` waits for an API that is not up yet, and not for one that refuses it |
 
 They need `bash`, `curl`, and the Python modules of all three
@@ -249,7 +306,7 @@ or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool` or Apache's
 `htpasswd`. The web server and the language model are stand-ins under
 `tests/lib/`; the embedding model is the real one, downloaded once, about
 65 MB. A test skips (exit 77) when something it needs is missing, and says
-what. The whole run takes two to three minutes, most of it the two search
+what. The whole run takes three to four minutes, most of it the search
 tests. CI builds Xymon's `main` and runs them with nothing missing:
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
 

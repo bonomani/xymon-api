@@ -1,4 +1,4 @@
-.TH XYMONAPI 8 "October 29, 2026" "xymon-api"
+.TH XYMONAPI 8 "October 30, 2026" "xymon-api"
 .SH NAME
 xymonapi \- read-only HTTP and JSON interface to the Xymon server
 .SH SYNOPSIS
@@ -37,6 +37,9 @@ Whether xymond answers a ping: {"alive":true,"server_version":"xymond ..."}
 when it does, and {"alive":false} when the ping fails -- xymond is down, or
 XYMSRV or XYMON is wrong. Like every path, it answers 401 without a user when
 XYMONAPI_PASSWD is set.
+Its "search" field describes the index /search reads -- how many passages
+of manual pages and of history, when it was built -- and is null when there
+is none.
 .IP "\fB/states\fR [\fBentity\fR=HOST] [\fBtest\fR=TEST] [\fBverdict\fR=VERDICT]"
 The status board, one state per host and test. The colour is given as a
 verdict: green is ok, yellow warning, red critical, blue disabled, clear
@@ -55,6 +58,17 @@ with the words given and until when. The command line that set the status
 is left out of the text, as the web page leaves it out. HOST and TEST are
 taken as given, not as patterns: 404 when the board has no such status. At
 most 1 MiB of text.
+.IP "\fB/search\fR \fBq\fR=QUESTION [\fBkind\fR=docs|history] [\fBk\fR=N]"
+The N passages (5 by default, 20 at most) of Xymon's manual pages and of
+its history nearest QUESTION by meaning, best first, from the index that
+.I xymonapi-rag(1)
+builds: the task tasks.d/xymonapi-rag, once a day. Each passage says where
+it comes from -- page, section and item, or host, test and time -- and a
+history passage carries the status text the monitored host sent, marked as
+data, not instructions. The index is read again when the file changes, so
+the task needs no restart of the API. 404, saying so, when there is no index
+or the modules in rag/requirements.txt are missing: search is optional, and
+the other operations need neither.
 .IP "\fB/series\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBmetric\fR=DATASET] [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
 The values of one dataset of the RRD file TEST.rrd of HOST, under
 $XYMONRRDS, read with rrdtool. TEST is the file's name, not the column on
@@ -111,6 +125,9 @@ the port when the web server is not on 80.
 .IP "\fBXYMONHISTDIR\fR, \fBXYMONHISTLOGS\fR"
 Where xymond_history keeps the events and the saved status texts, for
 /events and /histlog.
+.IP "\fBXYMONAPI_RAG_INDEX\fR, \fBXYMONAPI_RAG_MODEL\fR, \fBXYMONAPI_RAG_OFFLINE\fR"
+The index /search reads, and the embedding model, as for xymonapi-rag(1),
+which writes the index with the same settings from the same file.
 .LP
 Three settings are its own. Put them in a file under
 \fBxymonserver.d/\fR beside xymonserver.cfg, which reads its files, for
@@ -138,6 +155,11 @@ requirements.txt, the Python modules it needs.
 .IP "\fB$XYMONHOME/etc/tasks.d/xymonapi\fR"
 The xymonlaunch task, installed with a DISABLED line. A later installation
 leaves it as it is.
+.IP "\fB$XYMONHOME/etc/xymonapi-apache.conf\fR"
+An Apache snippet that serves the API through the web server, for other
+machines: a ProxyPass of /xymon/api/ to 127.0.0.1:1986, over HTTPS only.
+Include it where xymon-apache.conf is included. Installed once; a later
+installation leaves it as it is.
 .IP "\fB$XYMONHOME/etc/xymonserver.d/\fR"
 A file of yours here holds the three settings of its own listed under
 ENVIRONMENT. Nothing is installed there.
@@ -155,7 +177,9 @@ is a 502. Its answer names the reason when the text is xymonapi's own, as
 settings, goes to the log instead, and the answer says so.
 
 xymonapi speaks plain HTTP. To reach it from other machines over HTTPS, keep
-it on 127.0.0.1 and put a web server in front of it, as for the CGI programs.
+it on 127.0.0.1 and put a web server in front of it, as for the CGI programs:
+xymonapi-apache.conf, under FILES, does that for Apache. Within one machine,
+or through an SSH tunnel to it, nothing more is needed.
 
 Requests are served from a thread pool: a slow one holds up itself alone.
 

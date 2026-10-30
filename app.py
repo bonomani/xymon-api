@@ -28,6 +28,17 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO,
 log = logging.getLogger("xymonapi")
 
 SPEC_PATH = Path(__file__).resolve().parent / "openapi.yaml"
+RAG_DIR = Path(__file__).resolve().parent / "rag"
+
+
+def _rag():
+    """rag/xymonrag.py, imported when first needed: /search and the search
+    part of /health use it, the other operations do not, and its modules
+    (fastembed, numpy) are not required unless the search is used."""
+    if str(RAG_DIR) not in sys.path:
+        sys.path.insert(0, str(RAG_DIR))
+    import xymonrag
+    return xymonrag
 
 
 def _upstream(exc: Exception) -> JSONResponse:
@@ -55,12 +66,54 @@ def _refused(exc: Exception) -> JSONResponse:
 # its thread pool, so a slow xymond, rrdtool or showgraph holds up that one
 # request and not the event loop -- /health keeps answering meanwhile.
 def _health(request):
+    out: dict = {"alive": False, "search": _search_info()}
     try:
         version = xymon.ping()
     except Exception as exc:                        # noqa: BLE001
         log.warning("ping: %s: %s", type(exc).__name__, exc)
-        return JSONResponse({"alive": False})
-    return JSONResponse({"alive": True, "server_version": version})
+        return JSONResponse(out)
+    out.update(alive=True, server_version=version)
+    return JSONResponse(out)
+
+
+def _search_info():
+    """The index /search reads, for /health: its size and age, or null when
+    there is none -- or no numpy to read it with, which the log says."""
+    try:
+        return _rag().index_info()
+    except Exception as exc:                        # noqa: BLE001
+        log.warning("search index: %s: %s", type(exc).__name__, exc)
+        return None
+
+
+def _search(request):
+    q = request.query_params
+    question, kind, k = (q.get("q") or "").strip(), q.get("kind"), q.get("k", "5")
+    if not question:
+        return JSONResponse({"error": "bad_request", "detail": "q, the question, is needed"},
+                            status_code=400)
+    if kind is not None and kind not in ("docs", "history"):
+        return JSONResponse({"error": "bad_request", "detail": "kind must be docs or history"},
+                            status_code=400)
+    if not k.isdigit() or not 1 <= int(k) <= 20:
+        return JSONResponse({"error": "bad_request", "detail": "k must be 1 to 20"},
+                            status_code=400)
+    try:
+        rag = _rag()
+    except ImportError as exc:
+        return JSONResponse({"error": "not_found", "detail": "search is not set up on this "
+                             "server: the Python modules in rag/requirements.txt are missing "
+                             f"({exc.name})"}, status_code=404)
+    try:
+        # remote=False: this is the server; with no index it says so rather
+        # than asking itself.
+        items = rag.search(question[:2000], kind, int(k), remote=False)
+    except rag.IndexProblem as exc:
+        return JSONResponse({"error": "not_found", "detail": f"search is not set up on this "
+                             f"server: {exc}; enable the xymonapi-rag task"}, status_code=404)
+    except Exception as exc:                        # noqa: BLE001
+        return _upstream(exc)
+    return JSONResponse({"items": items})
 
 
 def _states(request):
@@ -146,6 +199,7 @@ ROUTES = {
     "/graphs": _graphs,
     "/events": _events,
     "/histlog": _histlog,
+    "/search": _search,
 }
 
 

@@ -5,7 +5,9 @@
 # xymonapi-rag.sh index | search QUESTION | ask QUESTION.
 #
 # As xymonapi.sh does, exit 77 when it cannot run here -- no Python 3.10, or
-# a module of rag/requirements.txt missing -- and say why.
+# a module of rag/requirements.txt missing -- and say why. The modules are
+# checked by xymonrag.py itself, when a command needs them: a search through
+# the API's index, or ask with it, needs none.
 
 PYTHON=${XYMONAPI_PYTHON:-python3}
 here=`dirname "$0"`
@@ -18,13 +20,4 @@ command -v "$PYTHON" >/dev/null 2>&1 || {
 	echo "xymonapi-rag: `$PYTHON -V 2>&1` is too old; it needs Python 3.10 or later" >&2
 	exit 77
 }
-# The module checks run from this script's directory: from the caller's, a
-# directory there named like a module would pass for it.
-missing=`cd "$here" && "$PYTHON" -c 'import importlib.util as u
-print(" ".join(m for m in ("fastembed", "numpy") if u.find_spec(m) is None))'`
-if [ -n "$missing" ]; then
-	echo "xymonapi-rag: missing Python modules: $missing (see rag/requirements.txt)" >&2
-	exit 77
-fi
-
 exec "$PYTHON" "$here/xymonrag.py" "$@"

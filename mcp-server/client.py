@@ -73,11 +73,18 @@ def api(path: str, **params: str | None) -> dict:
             raise APIError(f"xymonapi at {URL} answered more than {MAX_BODY} bytes")
         return json.loads(body)
     except urllib.error.HTTPError as e:
-        # The API's own explanation, not a bare status.
-        raise APIError(f"xymonapi answered {e.code}: {e.read().decode(errors='replace')}",
-                       e.code) from e
+        # The API's own explanation, not a bare status; and for the two
+        # failures of a first setup, what to check.
+        detail = e.read().decode(errors="replace")
+        if e.code == 401:
+            detail += (" -- XYMONAPI_USER and XYMONAPI_PASSWORD_FILE (or XYMONAPI_PASSWORD) must "
+                       "name a user of the API's htpasswd file" if USER else
+                       " -- set XYMONAPI_USER and XYMONAPI_PASSWORD_FILE (or XYMONAPI_PASSWORD)")
+        raise APIError(f"xymonapi answered {e.code}: {detail}", e.code) from e
     except urllib.error.URLError as e:
-        raise APIError(f"cannot reach xymonapi at {URL}: {e.reason}") from e
+        raise APIError(f"cannot reach xymonapi at {URL}: {e.reason} -- is the API running, and "
+                       "XYMONAPI_URL right? From another machine it is reached through the web "
+                       "server in front of it, as xymonapi(8) says") from e
     except ValueError as e:              # a URL urllib cannot use, or an answer that is not JSON
         raise APIError(f"xymonapi at {URL}: {e}") from e
     except OSError as e:                 # the connection broke, or timed out, while reading

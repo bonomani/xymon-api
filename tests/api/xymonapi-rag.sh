@@ -12,8 +12,12 @@
 # text line or a macro line. The status text is indexed, marked as sent by a
 # monitored host. A failing /histlog fails the indexing; an index searched
 # with another model than its own is refused.
-# The MCP server's search_history tool finds the same. ask gives the nearest
-# passages and the question to a language model that speaks the
+# The API serves the same search at /search from the same index, reloading
+# it when the file changes, and /health says what the index holds; the MCP
+# server's search_history tool asks the API, and so does a search run where
+# there is no index. index keeps the vectors it has and embeds only what is
+# new. eval scores the search against a file of questions. ask gives the
+# nearest passages and the question to a language model that speaks the
 # OpenAI-compatible API, with no key unless one is set, and prints its answer.
 #
 # The pages are three real ones from the Xymon tree in XYMON_SRC; the history
@@ -50,20 +54,31 @@ EOF
 printf 'red Tue Nov  7 23:33:20 2023 HTTP 500 Internal Server Error from https://web.example.com/login\n' \
 	> "$work/histlogs/web_example_com/http/Tue_Nov_7_23:33:20_2023"
 
-export TZ=UTC XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:1" \
-	XYMONHISTDIR="$work/hist" XYMONHISTLOGS="$work/histlogs"
-start_api
-
 unset XYMONAPI_RAG_LLM_KEY XYMONAPI_RAG_MODEL
-export XYMONAPI_URL="http://127.0.0.1:$API_PORT" XYMONAPI_RAG_DOCS="$work/docs" \
-	XYMONAPI_RAG_INDEX="$work/index.npz" XYMONAPI_RAG_SINCE=1699000000
+# The API reads the same index file as the indexer writes: both see
+# XYMONAPI_RAG_INDEX, as both do from xymonserver.d/ on a server.
+export TZ=UTC XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:1" \
+	XYMONHISTDIR="$work/hist" XYMONHISTLOGS="$work/histlogs" \
+	XYMONAPI_RAG_DOCS="$work/docs" XYMONAPI_RAG_INDEX="$work/index.npz" XYMONAPI_RAG_SINCE=1699000000
+start_api
+export XYMONAPI_URL="http://127.0.0.1:$API_PORT"
 rag() { "$ROOT/rag/xymonapi-rag.sh" "$@" 2> "$work/rag.err"; }
+
+# Before there is an index: the API says so, and /health says there is none.
+assert_equal "404" "$(api_code '/search?q=anything')" "/search with no index"
+assert_contains 'search is not set up on this server: no index' "$(api_get '/search?q=anything')" "and says so"
+assert_contains '"search":null' "$(api_get /health)" "/health reports no index"
 
 rc=0
 rag index > "$work/index.out" || rc=$?
 [ "$rc" -eq 77 ] && skip "$(cat "$work/rag.err")"
 [ "$rc" -eq 0 ] || fail "xymonapi-rag index exited with $rc: $(tail -n 5 "$work/rag.err")"
-assert_contains "indexed" "$(cat "$work/index.out")" "index says what it did"
+assert_match "indexed [0-9]+ passages \([0-9]+ new\)" "$(cat "$work/index.out")" "index says what it did"
+first=$(sed -E 's/indexed ([0-9]+) passages \(([0-9]+) new\).*/\1 \2/' "$work/index.out")
+assert_equal "${first% *}" "${first#* }" "the first indexing embeds every passage"
+# Again, with nothing changed: every vector is kept, none embedded.
+rag index > "$work/index.out" || fail "a second index failed: $(tail -n 5 "$work/rag.err")"
+assert_contains "(0 new)" "$(cat "$work/index.out")" "a second indexing with nothing new embeds nothing"
 # The model is in fastembed's cache now: offline, nothing is downloaded,
 # and the search works as before.
 XYMONAPI_RAG_OFFLINE=1 rag search -k 1 'anything' > /dev/null \
@@ -90,6 +105,38 @@ rc=0
 XYMONAPI_RAG_MODEL=BAAI/bge-base-en-v1.5 rag search 'anything' > /dev/null || rc=$?
 [ "$rc" -ne 0 ] || fail "a search with another model than the index's succeeded"
 assert_contains 'was built with BAAI/bge-small-en-v1.5' "$(cat "$work/rag.err")" "and says which model built the index"
+
+# The same search, served by the API from the same file.
+assert_contains 'alerts.cfg.5 -- RULES' "$(api_get '/search?q=how+long+must+a+problem+last+before+an+alert+is+sent&kind=docs&k=1')" "/search finds the manual-page passage"
+assert_contains 'web.example.com http' "$(api_get '/search?q=HTTP+500+error+on+the+login+page&kind=history&k=1')" "/search finds the change"
+assert_contains '"score":' "$(api_get '/search?q=HTTP+500+error&k=1')" "with a score"
+assert_equal "400" "$(api_code '/search?kind=docs')" "/search without a question"
+assert_equal "400" "$(api_code '/search?q=x&kind=zebra')" "/search with a kind that is neither"
+assert_equal "400" "$(api_code '/search?q=x&k=0')" "/search with k=0"
+assert_equal "400" "$(api_code '/search?q=x&k=21')" "/search with k=21"
+health=$(api_get /health)
+assert_contains '"search":{' "$health" "/health describes the index"
+assert_contains '"docs":' "$health" "how many manual-page passages"
+assert_contains '"history":2' "$health" "how many changes"
+assert_match '"built":"20[0-9][0-9]-' "$health" "and when it was built"
+
+# A search where there is no index asks the API instead: a laptop needs
+# neither fastembed nor the manual pages.
+assert_contains 'alerts.cfg.5 -- RULES' "$(XYMONAPI_RAG_INDEX="$work/none.npz" rag search -k 1 --kind docs 'how long must a problem last before an alert is sent' | grep '"title"' | head -n 1)" "search with no index here uses the API's"
+rc=0
+XYMONAPI_RAG_INDEX="$work/none.npz" XYMONAPI_URL="http://127.0.0.1:1" rag search 'x' > /dev/null || rc=$?
+[ "$rc" -ne 0 ] || fail "a search with no index and no API succeeded"
+assert_contains 'no index at' "$(cat "$work/rag.err")" "and with no API either it says so"
+assert_contains 'could not search either' "$(cat "$work/rag.err")" "naming both"
+
+# eval: a file of questions with the title each should find, and a score.
+printf '[{"question":"how long must a problem last before an alert is sent","kind":"docs","expect":"alerts.cfg.5 -- RULES"},\n{"question":"HTTP 500 error on the login page","kind":"history","expect":"web.example.com http"},\n{"question":"zebra crossing stripes","kind":"docs","expect":"zebra.1"}]\n' > "$work/eval.json"
+rc=0
+rag eval --min 3 "$work/eval.json" > "$work/eval.out" || rc=$?
+assert_equal "1" "$rc" "eval exits 1 below --min"
+assert_contains 'score: 2/3' "$(cat "$work/eval.out")" "and prints the score"
+assert_contains 'MISS zebra' "$(cat "$work/eval.out")" "naming the miss"
+rag eval --min 2 "$work/eval.json" > /dev/null || fail "eval failed at --min 2: $(cat "$work/rag.err")"
 
 # --kind keeps to one kind even when the other holds a nearer passage.
 assert_contains '.example.com' "$(top 'how long must a problem last before an alert is sent' --kind history)" "--kind history returns history"
@@ -177,10 +224,15 @@ assert_contains 'must be an http' "$(cat "$work/rag.err")" "a file:// model URL 
 # More changes than one /events answers: 1100 more, newer than the two
 # above and appended after them as xymond_history would, read in two pages,
 # so the oldest change of all is in the index too -- unless
-# XYMONAPI_RAG_MAX_HISTORY caps them, which keeps the newest.
+# XYMONAPI_RAG_MAX_HISTORY caps them, which keeps the newest. Indexed into
+# the file the API reads: only the 1100 are new, and the API sees them
+# without a restart.
 awk 'BEGIN { for (i = 1; i <= 1100; i++) printf "many%d.example.com conn %d %d 60 re gr 0\n", i, 1699500000 + i * 10, 1699500000 + i * 10 - 60 }' >> "$work/hist/allevents"
-XYMONAPI_RAG_INDEX="$work/index3.npz" rag index > "$work/index3.out" || fail "indexing 1102 changes failed: $(tail -n 5 "$work/rag.err")"
-assert_contains 'web.example.com http' "$(XYMONAPI_RAG_INDEX="$work/index3.npz" rag search -k 1 --kind history 'HTTP 500 error on the login page')" "the oldest of 1102 changes is indexed: /events was read page by page"
+rag index > "$work/index3.out" || fail "indexing 1102 changes failed: $(tail -n 5 "$work/rag.err")"
+assert_contains '(1100 new)' "$(cat "$work/index3.out")" "only the new changes are embedded"
+assert_contains 'web.example.com http' "$(rag search -k 1 --kind history 'HTTP 500 error on the login page')" "the oldest of 1102 changes is indexed: /events was read page by page"
+assert_contains '"history":1102' "$(api_get /health)" "the API reloaded the index the task rewrote"
+assert_match 'many[0-9]+\.example\.com conn' "$(api_get '/search?q=many1100.example.com+conn+red&kind=history&k=1')" "and searches it"
 XYMONAPI_RAG_INDEX="$work/index4.npz" XYMONAPI_RAG_MAX_HISTORY=50 rag index > /dev/null || fail "indexing with a cap failed: $(tail -n 5 "$work/rag.err")"
 assert_not_contains 'web.example.com' "$(XYMONAPI_RAG_INDEX="$work/index4.npz" rag search -k 3 --kind history 'HTTP 500 error on the login page')" "with XYMONAPI_RAG_MAX_HISTORY=50 the oldest is left out"
 # Names a digit apart embed much the same, so any of the newest fifty will do.
@@ -199,4 +251,4 @@ XYMONAPI_RAG_INDEX="$work/index2.npz" rag index > /dev/null || rc=$?
 assert_contains 'cannot read the history' "$(cat "$work/rag.err")" "and says why"
 [ -e "$work/index2.npz" ] && fail "a failed indexing left an index behind"
 
-pass "xymonapi-rag finds the manual-page passage and the history a question is about, the MCP tool too, and ask hands them to a language model"
+pass "xymonapi-rag finds the manual-page passage and the history a question is about, the API and the MCP tool serve the same index, index keeps what it has, and ask hands the passages to a language model"

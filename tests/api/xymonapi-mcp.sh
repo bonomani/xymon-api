@@ -101,10 +101,20 @@ st=$(call status '{"entity":"red.example.com","test":"conn"}')
 assert_contains 'down' "$st" "the status tool returns the status text"
 assert_contains 'critical' "$st" "and the verdict"
 assert_not_contains '"isError":true' "$st" "and not as an error"
+# The searches ask the API, which has no index here: a tool error that
+# says so, with no fastembed needed on this side.
+answer=$(call search_docs '{"question":"what does purple mean"}')
+assert_contains '"isError":true' "$answer" "a search with no index on the server is a tool error"
+assert_contains 'search is not set up on this server' "$answer" "that says why"
 # An HTTP refusal: there is no RRD file, and the API answers 404.
 answer=$(call series '{"entity":"red.example.com","test":"la"}')
 assert_contains '"isError":true' "$answer" "an API refusal is a tool error"
 assert_contains 'answered 404' "$answer" "with the status the API answered"
+# The API not reachable at all: the error says what to check first.
+mcp "http://127.0.0.1:1" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true
+answer=$(grep '"id":3' "$work/mcp.out")
+assert_contains 'cannot reach xymonapi at http://127.0.0.1:1' "$answer" "an unreachable API names the URL"
+assert_contains 'is the API running, and XYMONAPI_URL right' "$answer" "and what to check"
 
 # The URL must be http or https: urllib would read a file:// one.
 mcp "file:///etc/passwd#" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true

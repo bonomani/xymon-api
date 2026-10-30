@@ -1,0 +1,12 @@
+[
+ {"question": "how long must a problem last before an alert is sent", "kind": "docs", "expect": "xymond_alert.8"},
+ {"question": "warn when a filesystem is 90 percent full", "kind": "docs", "expect": "analysis.cfg.5 -- DISK"},
+ {"question": "what does a purple status mean and when does a status turn purple", "kind": "docs", "expect": "PURPLE"},
+ {"question": "the xymon command line to disable a host's test for a number of minutes", "kind": "docs", "expect": "xymon.1"},
+ {"question": "check a web page for a string in its content", "kind": "docs", "expect": "hosts.cfg.5 -- HTTP TESTS"},
+ {"question": "run a task once a day with xymonlaunch: the INTERVAL setting", "kind": "docs", "expect": "xymonlaunch.8"},
+ {"question": "how are RRD files written and when is the cache flushed", "kind": "docs", "expect": "xymond_rrd.8"},
+ {"question": "send an alert by SMS or run a script instead of mail", "kind": "docs", "expect": "alerts.cfg.5"},
+ {"question": "route: tag in hosts.cfg so a ping failure shows yellow when the router is down", "kind": "docs", "expect": "hosts.cfg.5 -- CONNECTIVITY"},
+ {"question": "how to check that a process is running: the PROC setting", "kind": "docs", "expect": "analysis.cfg.5 -- PROCS"}
+]
