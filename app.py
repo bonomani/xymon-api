@@ -88,6 +88,15 @@ def _entities(request):
     return JSONResponse({"items": items})
 
 
+def _status(request):
+    q = request.query_params
+    try:
+        s = xymon.status(q.get("entity"), q.get("test"))
+    except Exception as exc:                        # noqa: BLE001
+        return _refused(exc)
+    return JSONResponse(s)
+
+
 def _series(request):
     q = request.query_params
     try:
@@ -132,6 +141,7 @@ ROUTES = {
     "/states": _states,
     "/alarms": _alarms,
     "/entities": _entities,
+    "/status": _status,
     "/series": _series,
     "/graphs": _graphs,
     "/events": _events,

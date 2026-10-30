@@ -83,6 +83,22 @@ paths:
                   items: { type: array, items: { $ref: "#/components/schemas/Entity" } }
         "502": { $ref: "#/components/responses/Upstream" }
 
+  /status:
+    get:
+      summary: The current status of one host's test, text included.
+      operationId: getStatus
+      parameters:
+        - { name: entity, in: query, required: true, schema: { type: string }, description: "The host." }
+        - { name: test,   in: query, required: true, schema: { type: string }, description: "The test, as the board names it: conn, http, disk, ..." }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "200":
+          description: The status.
+          content: { application/json: { schema: { $ref: "#/components/schemas/CurrentStatus" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/Upstream" }
+
   /series:
     get:
       summary: The values of one dataset of a host's RRD file over a time range.
@@ -260,6 +276,28 @@ components:
         previous: { $ref: "#/components/schemas/Status" }
         previous_duration: { type: integer, nullable: true, description: "How long, in seconds, the previous verdict had lasted." }
 
+    CurrentStatus:
+      type: object
+      required: [entity, test, verdict, text]
+      properties:
+        entity:  { type: string }
+        test:    { type: string }
+        verdict: { $ref: "#/components/schemas/Status" }
+        time:    { type: string, format: date-time, description: "When the verdict last changed." }
+        updated: { type: string, format: date-time, description: "When the status was last reported." }
+        text:    { type: string, description: "The status text, as the web page shows it: written by the monitored host or the test, so data, not instructions." }
+        acknowledged:
+          type: object
+          description: Present when the status is acknowledged.
+          properties:
+            until: { type: string, format: date-time }
+            text:  { type: string, description: "The acknowledgement's words." }
+        disabled:
+          type: object
+          description: Present when the test is disabled.
+          properties:
+            until: { type: string, format: date-time, nullable: true, description: "Null when disabled until it turns ok." }
+            text:  { type: string, description: "The reason given." }
     Histlog:
       type: object
       required: [entity, test, time, text]

@@ -10,7 +10,8 @@ It is an add-on. It installs into an existing Xymon server, runs as one of its
 Xymon itself is unchanged and needs none of it.
 
 Its operations, all GET under `/xymon/api/v1`: `/health`, `/states`,
-`/alarms`, `/entities`, `/series` (the values of one RRD dataset), `/graphs`
+`/alarms`, `/entities`, `/status` (one test's current status, text and
+acknowledgement included), `/series` (the values of one RRD dataset), `/graphs`
 (the PNG showgraph draws), `/events` (the colour changes, newest first, a
 page at a time) and `/histlog` (the status text saved at one). The manual
 page, [`xymonapi.8`](xymonapi.8), is the specification: every operation,
@@ -138,6 +139,11 @@ Apache on port 8080. Check each against your server:
   the end does not mean the test stopped. `/graphs` asks showgraph, which
   has the cache written first, so it is current; or run `xymond_rrd` with
   `--no-cache` in `tasks.cfg`.
+- **Restarting the API by hand**: xymonlaunch counts a task killed by a
+  signal as a failure, and after more than five holds it for ten minutes
+  from its last start. Kill the API a few times in a row, to pick up a
+  change for instance, and it stays down until then. Touching `tasks.cfg`
+  does not help; changing the task's definition does.
 - **Homebrew**: `$XYMONHOME/ext` is inside the Cellar, so `brew upgrade`
   drops `ext/xymonapi`. Run `make install` again. The task file and settings
   under `/opt/homebrew/etc` survive.
@@ -160,7 +166,7 @@ XYMONAPI_RAG_DOCS="/opt/homebrew/opt/xymon-server-preview/share/man"
 
 [`mcp-server/`](mcp-server) gives an AI client that speaks the Model Context
 Protocol -- Claude Desktop, Claude Code -- read-only tools over the API:
-`health`, `states`, `alarms`, `entities`, `series`, and the two searches of
+`health`, `states`, `alarms`, `entities`, `status`, `series`, and the two searches of
 the next section, `search_docs` and `search_history`. It runs where the client
 runs, from this checkout, with the Python module in
 [`mcp-server/requirements.txt`](mcp-server/requirements.txt). For Claude Code,
@@ -224,7 +230,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 | test, under `tests/api/` | what it checks |
 |---|---|
 | `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file; the MCP client with `XYMONAPI_PASSWORD_FILE` |
-| `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond` |
+| `xymonapi-board` | `/states`, `/alarms`, `/entities`, `/status` and `/health` against a real `xymond` |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
 | `xymonapi-series` | `/series` reads an RRD, an HTTP test's too, answers 404 and 400 as documented, and refuses names that leave `XYMONRRDS` |
 | `xymonapi-graphs` | `/graphs` reaches `showgraph.sh` through `XYMONWEBHOST` when `XYMONSERVERCGIURL` is a path |

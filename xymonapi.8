@@ -45,6 +45,15 @@ nodata and purple unknown.
 Every state whose verdict is not ok.
 .IP "\fB/entities\fR"
 Each host on the board, once.
+.IP "\fB/status\fR \fBentity\fR=HOST \fBtest\fR=TEST"
+The current status of HOST's TEST, from xymondboard: its verdict, when it
+last changed (time) and was last reported (updated), and its text -- what
+the web page shows, written by the monitored host or the test. When it is
+acknowledged, or the test disabled -- by hand, or blue from a DOWNTIME tag
+in hosts.cfg -- that is said too, with the words given and until when. The
+command line that set the status is left out of the text, as the web page
+leaves it out. 404 when the board has no such status. At most 1 MiB of
+text.
 .IP "\fB/series\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBmetric\fR=DATASET] [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
 The values of one dataset of the RRD file TEST.rrd of HOST, under
 $XYMONRRDS, read with rrdtool. TEST is the file's name, not the column on

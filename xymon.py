@@ -151,6 +151,46 @@ def entities() -> list[dict]:
     return list(seen.values())
 
 
+_STATUS_FIELDS = ["hostname", "testname", "color", "lastchange", "logtime",
+                  "acktime", "disabletime", "ackmsg", "dismsg", "msg"]
+_STATUS_MAX = 1024 * 1024
+_STATUS_HEAD = re.compile(r"\Astatus(?:\+\d+)?\s+\S+\s+\S+\s*(?:<!--\s*\[flags:[^\]]*\]\s*-->\s*)?")
+
+
+def status(entity: str | None, test: str | None) -> dict:
+    """The current status of HOST's TEST: its verdict, when it last changed
+    and was last updated, whether it is acknowledged or disabled and with
+    what words, and the status text itself -- what the web page shows."""
+    host, tst = _name(entity, "entity"), _name(test, "test")
+    board = query(f"xymondboard host={host} test={tst} fields={','.join(_STATUS_FIELDS)}")
+    line = next((l for l in board.splitlines() if l.strip()), None)
+    if line is None:
+        raise NotFound(f"no status for {host} {tst}")
+    # msg is last and may hold "|"; the fields before it never do, except the
+    # rare ackmsg and dismsg, which xymond writes before msg.
+    f = line.split("|", len(_STATUS_FIELDS) - 1)
+    d = dict(zip(_STATUS_FIELDS, f))
+    # xymondboard writes a newline as the two characters "\n". The text
+    # begins with the command that set it, "status+30 host,example,com.conn red",
+    # and xymond's flags comment, which the web page does not show either.
+    text = d.get("msg", "")[:_STATUS_MAX].replace("\\n", "\n")
+    text = _STATUS_HEAD.sub("", text, count=1)
+    out = {"entity": host, "test": tst, "verdict": _verdict(d.get("color", "")),
+           "time": _iso(d.get("lastchange", "")), "updated": _iso(d.get("logtime", "")),
+           "text": text}
+    if _DIGITS.fullmatch(d.get("acktime", "")) and int(d["acktime"]) > 0:
+        out["acknowledged"] = {"until": _iso(d["acktime"]),
+                               "text": d.get("ackmsg", "").replace("\\n", "\n")}
+    # Disabled by hand, with an end time or -1 for "until it is ok again"; or
+    # blue from a DOWNTIME tag in hosts.cfg, with no end time and the words
+    # "Planned downtime".
+    until = d.get("disabletime", "")
+    if d.get("color") == "blue" or (_DIGITS.fullmatch(until) and until != "0"):
+        out["disabled"] = {"until": _iso(until) if _DIGITS.fullmatch(until) and until != "0" else None,
+                           "text": d.get("dismsg", "").replace("\\n", "\n")}
+    return out
+
+
 def _name(value: str | None, what: str) -> str:
     rx = _TEST if what == "test" else _NAME
     if not value or not rx.fullmatch(value) or ".." in value:
