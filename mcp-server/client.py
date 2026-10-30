@@ -67,7 +67,19 @@ def _context() -> ssl.SSLContext:
     return ctx
 
 
-_opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=_context()))
+_opener: urllib.request.OpenerDirector | None = None
+
+
+def open_url(req, timeout: float):
+    """urlopen through the opener above: no redirect, full verification. The
+    opener is built on the first call, not when the module is imported, so
+    that a wrong XYMONAPI_CA is an APIError each tool and command reports,
+    rather than a crash before the MCP server has answered anything."""
+    global _opener
+    if _opener is None:
+        _opener = urllib.request.build_opener(
+            _NoRedirect, urllib.request.HTTPSHandler(context=_context()))
+    return _opener.open(req, timeout=timeout)
 # An answer of the API is a board or a list of events: never near this.
 MAX_BODY = 16 * 1024 * 1024
 
@@ -84,7 +96,7 @@ def api(path: str, **params: str | None) -> dict:
         if USER:
             token = base64.b64encode(f"{USER}:{_password()}".encode()).decode()
             req.add_header("Authorization", f"Basic {token}")
-        with _opener.open(req, timeout=30) as r:
+        with open_url(req, 30) as r:
             body = r.read(MAX_BODY + 1)
         if len(body) > MAX_BODY:
             raise APIError(f"xymonapi at {URL} answered more than {MAX_BODY} bytes")

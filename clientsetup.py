@@ -80,17 +80,21 @@ if [ -n "$USER" ]; then
 		printf '\\n'
 		( umask 077 && printf '%s\\n' "$pw" > "$PASSFILE" )
 	fi
-	auth="-u $USER:$(cat "$PASSFILE")"
+	# The user and password go to curl in a config on its stdin, not on its
+	# command line, which ps shows to everyone; the first line of the file is
+	# the password, as the MCP client reads it, with curl's two escapes.
+	pw=$(head -n 1 "$PASSFILE" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g')
+	curlcfg="user = \\"$USER:$pw\\""
 else
-	auth=""
+	curlcfg=""
 fi
 
 ca=""
 [ -s "$CAFILE" ] && ca="--cacert $CAFILE"
 
 say "does the API answer?"
-# shellcheck disable=SC2086 # auth and ca are two words each, or none
-health=$(curl -sS --max-time 15 $auth $ca "$URL/xymon/api/v1/health" 2>"$HOME/.xymon-setup.err") || {{
+# shellcheck disable=SC2086 # ca is two words, or none
+health=$(printf '%s\\n' "$curlcfg" | curl -sS -K - --max-time 15 $ca "$URL/xymon/api/v1/health" 2>"$HOME/.xymon-setup.err") || {{
 	grep -qi 'certificate' "$HOME/.xymon-setup.err" && die "$URL has a certificate this machine does not trust: copy the server's certificate, or the CA that signed it, to $CAFILE and run this again"
 	die "no answer from $URL: $(cat "$HOME/.xymon-setup.err")"
 }}

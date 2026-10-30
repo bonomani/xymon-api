@@ -409,7 +409,7 @@ def ask(question: str, k: int = 5) -> str:
     if LLM_KEY:
         req.add_header("Authorization", f"Bearer {LLM_KEY}")
     try:
-        with client._opener.open(req, timeout=LLM_TIMEOUT) as r:
+        with client.open_url(req, LLM_TIMEOUT) as r:
             answer = r.read(LLM_MAX + 1)
         if len(answer) > LLM_MAX:
             raise SystemExit(f"xymonapi-rag: the language model at {LLM_URL} answered "
