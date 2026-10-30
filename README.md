@@ -213,10 +213,12 @@ takes about a minute. The index holds the last 30 days of history, the newest
 5000 changes at most, so `make install` also writes a daily xymonlaunch task,
 `tasks.d/xymonapi-rag`, DISABLED: remove the line, and put the variables above
 in a file under `xymonserver.d/`, the password in a file of its own named by
-`XYMONAPI_PASSWORD_FILE`. `ask` hands the passages to a
-language model speaking the OpenAI-compatible API, a local Ollama by default;
-with Claude, the MCP tools are the simpler way. Every command and setting is
-in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
+`XYMONAPI_PASSWORD_FILE`. `ask` hands the passages to a language model
+speaking the OpenAI-compatible API, a local Ollama by default, LM Studio
+with two settings. Pick the model with care: a small one such as `llama3.2`
+answers in a second but makes options up, where a larger one says when the
+passages do not hold the answer. With Claude, the MCP tools are the simpler
+way. Every command and setting is in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
 
 ## Tests
 
