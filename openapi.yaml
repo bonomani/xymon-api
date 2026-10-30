@@ -16,6 +16,7 @@ servers:
 security:
   - {}
   - basicAuth: []
+  - bearerAuth: []
 
 paths:
   /health:
@@ -224,12 +225,75 @@ paths:
             text/plain: { schema: { type: string } }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /tokens:
+    get:
+      summary: The caller's client tokens -- which machines, since when; never the tokens.
+      operationId: listTokens
+      security: [ { basicAuth: [] } ]
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "200":
+          description: The caller's tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/TokenEntry" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    post:
+      summary: A token for the caller on one machine, replacing any it had; shown this once.
+      operationId: issueToken
+      security: [ { basicAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client]
+              properties:
+                client: { type: string, description: "The machine's name: its short hostname, letters, digits, . _ or -, 64 at most." }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "201":
+          description: The token. Only its SHA-256 is kept; it cannot be shown again.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, client, token]
+                properties:
+                  user:   { type: string }
+                  client: { type: string }
+                  token:  { type: string, description: "xat_ and 43 characters, sent as Authorization: Bearer." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "502": { $ref: "#/components/responses/Upstream" }
+
+  /tokens/{client}:
+    delete:
+      summary: Revoke the caller's token on one machine.
+      operationId: revokeToken
+      security: [ { basicAuth: [] } ]
+      parameters:
+        - { name: client, in: path, required: true, schema: { type: string } }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "204": { description: Revoked; the token is refused from now on. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   securitySchemes:
     basicAuth:
       type: http
       scheme: basic
       description: The users of the web pages' htpasswd file, named by XYMONAPI_PASSWD.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A client token from POST /tokens. It opens every path but /tokens, which takes the password.
 
   schemas:
     Status:
@@ -372,6 +436,13 @@ components:
         test:   { type: string }
         time:   { type: string, format: date-time }
         text:   { type: string, description: "The status message as xymond received it, its first word the colour; at most 1 MiB." }
+
+    TokenEntry:
+      type: object
+      required: [client]
+      properties:
+        client:  { type: string }
+        created: { type: string, format: date-time, nullable: true }
 
     Error:
       type: object

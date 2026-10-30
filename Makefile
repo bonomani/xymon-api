@@ -20,7 +20,7 @@
 
 MANDIR = /usr/share/man
 PREFIX = $(HOME)/.local
-API = app.py xymon.py clientsetup.py openapi.yaml requirements.txt xymonapi.sh
+API = app.py xymon.py clientsetup.py tokens.py openapi.yaml requirements.txt xymonapi.sh
 RAG = rag/xymonrag.py rag/xymonapi-rag.sh rag/requirements.txt
 MCP = mcp-server/server.py mcp-server/client.py mcp-server/xymonapi-mcp.sh mcp-server/requirements.txt
 CLIENT = $(DESTDIR)$(PREFIX)/libexec/xymonapi
@@ -38,7 +38,7 @@ install:
 	@test -n "$(XYMONHOME)" || { echo "usage: make install XYMONHOME=<the Xymon server directory>" >&2; exit 1; }
 	mkdir -p "$(EXT)/rag" "$(EXT)/mcp-server"
 	cp -f $(API) "$(EXT)/"
-	chmod 644 "$(EXT)/app.py" "$(EXT)/xymon.py" "$(EXT)/clientsetup.py" "$(EXT)/openapi.yaml" "$(EXT)/requirements.txt"
+	chmod 644 "$(EXT)/app.py" "$(EXT)/xymon.py" "$(EXT)/clientsetup.py" "$(EXT)/tokens.py" "$(EXT)/openapi.yaml" "$(EXT)/requirements.txt"
 	chmod 755 "$(EXT)/xymonapi.sh"
 	$(call commit)
 	cp -f $(RAG) "$(EXT)/rag/"

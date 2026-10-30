@@ -6,6 +6,10 @@ XYMONAPI_URL is where the API is, http://127.0.0.1:1986 by default.
 XYMONAPI_USER and XYMONAPI_PASSWORD are sent when the API asks for a user;
 XYMONAPI_PASSWORD_FILE names a file holding the password instead, for an
 environment that other programs read too, as xymonserver.cfg's is.
+XYMONAPI_TOKEN_FILE names a file holding a client token instead -- what the
+setup script /client writes keeps -- and is used before a user and password:
+the token is this machine's own, revoked on its own (xymonapi(8), TOKENS).
+XYMONAPI_TOKEN is the token itself, for a test or a one-off.
 XYMONAPI_CA names the certificate, or the CA, to trust for an https:// URL
 when it is not one the system trusts already: xymond's own, from
 xymon-tls(7), which the API uses too.
@@ -25,6 +29,19 @@ USER = os.environ.get("XYMONAPI_USER", "")
 PASSWORD = os.environ.get("XYMONAPI_PASSWORD", "")
 PASSWORD_FILE = os.environ.get("XYMONAPI_PASSWORD_FILE", "")
 CA = os.environ.get("XYMONAPI_CA", "")
+TOKEN = os.environ.get("XYMONAPI_TOKEN", "")
+TOKEN_FILE = os.environ.get("XYMONAPI_TOKEN_FILE", "")
+
+
+def _token() -> str:
+    """XYMONAPI_TOKEN, or the first line of XYMONAPI_TOKEN_FILE, or ""."""
+    if TOKEN or not TOKEN_FILE:
+        return TOKEN
+    try:
+        with open(TOKEN_FILE, encoding="utf-8") as fd:
+            return fd.readline().strip()
+    except OSError as e:
+        raise APIError(f"cannot read XYMONAPI_TOKEN_FILE={TOKEN_FILE}: {e.strerror}") from e
 
 
 def _password() -> str:
@@ -93,7 +110,10 @@ def api(path: str, **params: str | None) -> dict:
     query = urlencode({k: v for k, v in params.items() if v is not None and v != ""})
     try:
         req = urllib.request.Request(f"{URL}/xymon/api/v1{path}" + (f"?{query}" if query else ""))
-        if USER:
+        bearer = _token()
+        if bearer:
+            req.add_header("Authorization", f"Bearer {bearer}")
+        elif USER:
             token = base64.b64encode(f"{USER}:{_password()}".encode()).decode()
             req.add_header("Authorization", f"Basic {token}")
         with open_url(req, 30) as r:
@@ -106,9 +126,11 @@ def api(path: str, **params: str | None) -> dict:
         # failures of a first setup, what to check.
         detail = e.read().decode(errors="replace")
         if e.code == 401:
-            detail += (" -- XYMONAPI_USER and XYMONAPI_PASSWORD_FILE (or XYMONAPI_PASSWORD) must "
+            detail += (" -- the token in XYMONAPI_TOKEN_FILE was revoked or replaced: run the "
+                       "setup script from /client again" if (TOKEN or TOKEN_FILE) else
+                       " -- XYMONAPI_USER and XYMONAPI_PASSWORD_FILE (or XYMONAPI_PASSWORD) must "
                        "name a user of the API's htpasswd file" if USER else
-                       " -- set XYMONAPI_USER and XYMONAPI_PASSWORD_FILE (or XYMONAPI_PASSWORD)")
+                       " -- set XYMONAPI_TOKEN_FILE, or XYMONAPI_USER and XYMONAPI_PASSWORD_FILE")
         raise APIError(f"xymonapi answered {e.code}: {detail}", e.code) from e
     except urllib.error.URLError as e:
         if isinstance(e.reason, ssl.SSLCertVerificationError):

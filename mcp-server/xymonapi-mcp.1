@@ -64,6 +64,11 @@ nowhere else.
 .SH ENVIRONMENT
 .IP "\fBXYMONAPI_URL\fR"
 Where xymonapi(8) is. The default is http://127.0.0.1:1986.
+.IP "\fBXYMONAPI_TOKEN_FILE\fR, \fBXYMONAPI_TOKEN\fR"
+A client token, from the first line of the file XYMONAPI_TOKEN_FILE names,
+or XYMONAPI_TOKEN itself: this machine's own credential (xymonapi(8),
+TOKENS), sent before a user and password are. The setup script /client
+writes keeps one and names its file here.
 .IP "\fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR, \fBXYMONAPI_PASSWORD_FILE\fR"
 The user and password sent when the API has XYMONAPI_PASSWD set. The
 password can come from the first line of the file XYMONAPI_PASSWORD_FILE

@@ -36,7 +36,7 @@ assert_contains "XYMONHOME" "$(cat "$work/nohome.log")" "and it says what is mis
 ( umask 077 && "$make" -C "$ROOT" install XYMONHOME="$home" MANDIR="$work/man" ) >"$work/install.log" 2>&1 \
 	|| fail "make install failed: $(tail -n 5 "$work/install.log")"
 
-for f in app.py xymon.py openapi.yaml requirements.txt xymonapi.sh; do
+for f in app.py xymon.py clientsetup.py tokens.py openapi.yaml requirements.txt xymonapi.sh; do
 	assert_file_exists "$home/ext/xymonapi/$f"
 done
 [ -x "$home/ext/xymonapi/xymonapi.sh" ] || fail "the launcher is not executable"

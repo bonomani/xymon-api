@@ -30,13 +30,13 @@ The OpenAPI description of every operation is served at /openapi.json, and
 is the file openapi.yaml beside the program.
 
 .SH OPERATIONS
-Every path is under /xymon/api/v1. Only GET is accepted, and any other path
-answers 404.
+Every path is under /xymon/api/v1. Only GET is accepted, but for POST and
+DELETE on /tokens, and any other path answers 404.
 .IP "\fB/health\fR"
 Whether xymond answers a ping: {"alive":true,"server_version":"xymond ..."}
 when it does, and {"alive":false} when the ping fails -- xymond is down, or
-XYMSRV or XYMON is wrong. Like every path, it answers 401 without a user when
-XYMONAPI_PASSWD is set.
+XYMSRV or XYMON is wrong. Like every path, it answers 401 without a user, or
+a client token, when XYMONAPI_PASSWD is set.
 Its "search" field describes the index /search reads -- how many passages
 of manual pages and of history, when it was built -- and is null when there
 is none.
@@ -120,6 +120,26 @@ or a time it cannot read, is answered with 400. A test name may hold a
 colon, as an HTTP test's RRD file does (tcp.http.www.example.com:8080,);
 a host name may not.
 
+.SH TOKENS
+With XYMONAPI_PASSWD set, a user may get a token for one machine and send it
+instead of the password: Authorization: Bearer TOKEN. The setup script that
+/client writes does so, naming the machine by its short hostname, so the
+password stays off the laptop. A token opens every path but /tokens, which
+takes the password: a stolen token cannot make others, or renew itself.
+.IP "\fBPOST /tokens\fR {"client": NAME}"
+A new token for the caller on NAME -- letters, digits, . _ or -, 64 at most
+-- replacing any the caller had there, which is refused from then on. It is
+shown this once: only its SHA-256 is kept, in $XYMONAPI_TOKENS.
+.IP "\fBGET /tokens\fR"
+The caller's tokens: each machine's name and when its token was made.
+.IP "\fBDELETE /tokens/\fRNAME"
+Revokes the caller's token on NAME.
+.LP
+A user sees and revokes only their own tokens. An admin revokes anyone's by
+removing that line from $XYMONAPI_TOKENS: one JSON object per token, with
+its user, machine and SHA-256. The machine's name is the laptop's word, not
+proof: it names the token, and two machines of one name share one.
+
 .SH ENVIRONMENT
 The task file loads xymonserver.cfg, and xymonapi uses these settings from it:
 .IP "\fBXYMSRV\fR"
@@ -147,7 +167,7 @@ says so in its first lines.
 The index /search reads, and the embedding model, as for xymonapi-rag(1),
 which writes the index with the same settings from the same file.
 .LP
-Six settings are its own. Put them in a file under
+Seven settings are its own. Put them in a file under
 \fBxymonserver.d/\fR beside xymonserver.cfg, which reads its files, for
 instance xymonapi.cfg:
 .IP "\fBXYMONAPI_LISTEN\fR"
@@ -162,6 +182,9 @@ what the pages ask for with nothing set. Set it to another file, or to the
 empty string for an API open to anyone who can reach it. The password is
 checked by Apache's htpasswd program, which must be on PATH; xymonapi does
 not start if it is not, or if it cannot read the file.
+.IP "\fBXYMONAPI_TOKENS\fR"
+The file of client tokens (TOKENS above), $XYMONVAR/xymonapi/tokens by
+default. The API creates it, mode 600, in a directory of mode 700.
 .IP "\fBXYMONAPI_TLS_CERT\fR, \fBXYMONAPI_TLS_KEY\fR"
 A certificate and its key, PEM: with them the API speaks HTTPS on its port,
 and plain HTTP gets no answer. The defaults are xymond's own,
@@ -202,9 +225,11 @@ is. Installed once; a later installation leaves them as they are.
 .IP "\fB$XYMONHOME/etc/xymonserver.d/\fR"
 A file of yours here holds the settings of its own listed under
 ENVIRONMENT. Nothing is installed there.
+.IP "\fB$XYMONVAR/xymonapi/tokens\fR"
+The client tokens' SHA-256s, one JSON line each (TOKENS above).
 .IP "\fB$XYMONSERVERLOGS/xymonapi.log\fR"
 The log, written through the task's LOGFILE. A missing Python or module is
-reported here.
+reported here, and so is each token made, revoked, or used: user@machine.
 .LP
 $XYMONHOME/etc and $XYMONHOME/ext are links to wherever an installation keeps
 those directories, /etc/xymon for instance.

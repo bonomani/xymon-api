@@ -21,6 +21,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
 import clientsetup
+import tokens
 import xymon
 
 # To stderr, which the task's LOGFILE collects: $XYMONSERVERLOGS/xymonapi.log.
@@ -202,13 +203,60 @@ def _client(request):
         name = clientsetup.valid_name(q.get("name"))
     except ValueError as exc:
         return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
-    creds = xymon.parse_basic(request.headers.get("authorization"))
-    user = creds[0] if creds and xymon.XYMONAPI_PASSWD else ""
+    user = getattr(request.state, "user", "")
     url = clientsetup.public_url(request.headers, str(request.url))
     text = clientsetup.render(url, user, name, fmt)
     media = "text/x-shellscript" if fmt == "sh" else "text/plain"
     return Response(content=text, media_type=f"{media}; charset=utf-8",
                     headers={"Content-Disposition": f'inline; filename="{name}-setup.{fmt}"'})
+
+
+def _no_users() -> JSONResponse | None:
+    if xymon.XYMONAPI_PASSWD:
+        return None
+    return JSONResponse({"error": "bad_request", "detail": "tokens are for the users of "
+                         "XYMONAPI_PASSWD, and this API asks for no password"}, status_code=400)
+
+
+async def _tokens(request):
+    """GET: the caller's tokens. POST {"client": NAME}: a new token for the
+    caller on that machine, replacing any it had, shown this once."""
+    refused = _no_users()
+    if refused:
+        return refused
+    user = request.state.user
+    if request.method == "GET":
+        return JSONResponse({"items": await run_in_threadpool(tokens.listing, user)})
+    try:
+        body = await request.json()
+        client = tokens.valid_client(body.get("client") if isinstance(body, dict) else None)
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+    try:
+        token = await run_in_threadpool(tokens.issue, user, client)
+    except OSError as exc:
+        return _upstream(RuntimeError(f"cannot write {tokens.TOKENS_FILE}: {exc.strerror}"))
+    log.info("token issued to %s@%s", user, client)
+    return JSONResponse({"user": user, "client": client, "token": token}, status_code=201)
+
+
+async def _token(request):
+    """DELETE: revoke the caller's token on one machine."""
+    refused = _no_users()
+    if refused:
+        return refused
+    user, client = request.state.user, request.path_params["client"]
+    try:
+        gone = await run_in_threadpool(tokens.revoke, user, client)
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+    except OSError as exc:
+        return _upstream(RuntimeError(f"cannot write {tokens.TOKENS_FILE}: {exc.strerror}"))
+    if not gone:
+        return JSONResponse({"error": "not_found", "detail": f"{user} has no token on {client}"},
+                            status_code=404)
+    log.info("token of %s@%s revoked", user, client)
+    return Response(status_code=204)
 
 
 ROUTES = {
@@ -255,19 +303,35 @@ def build_app() -> FastAPI:
         # Every path, not only the API's: FastAPI also serves /openapi.json
         # and its /docs pages, and with a password set nothing is answered
         # to a stranger.
+        def refuse(detail: str) -> JSONResponse:
+            return JSONResponse({"error": "unauthorized", "detail": detail}, status_code=401,
+                                headers={"WWW-Authenticate": 'Basic realm="xymon"'})
+
         @app.middleware("http")
-        async def _basic_auth(request, call_next):
-            creds = xymon.parse_basic(request.headers.get("authorization"))
+        async def _auth(request, call_next):
+            header = request.headers.get("authorization") or ""
+            if header.startswith("Bearer "):
+                # A token opens every path but the token operations: it may
+                # not make or list tokens, or a stolen one would renew itself.
+                if request.url.path.startswith(base + "/tokens"):
+                    return refuse("tokens are managed with the user's password, not a token")
+                who = await run_in_threadpool(tokens.check, header[7:].strip())
+                if not who:
+                    return refuse("this token is not valid, or was revoked")
+                request.state.user, request.state.client = who
+                log.info("%s@%s %s %s", who[0], who[1], request.method, request.url.path)
+                return await call_next(request)
+            creds = xymon.parse_basic(header)
             # htpasswd checks a bcrypt hash in tens of milliseconds: off the loop.
             if not creds or not await run_in_threadpool(xymon.verify_basic, *creds):
-                return JSONResponse(
-                    {"error": "unauthorized", "detail": "a user and password are needed"},
-                    status_code=401,
-                    headers={"WWW-Authenticate": 'Basic realm="xymon"'})
+                return refuse("a user and password, or a client token, are needed")
+            request.state.user, request.state.client = creds[0], None
             return await call_next(request)
 
     for path, handler in ROUTES.items():
         app.add_route(base + path, handler, methods=["GET"])
+    app.add_route(base + "/tokens", _tokens, methods=["GET", "POST"])
+    app.add_route(base + "/tokens/{client}", _token, methods=["DELETE"])
     app.openapi = lambda: spec                      # type: ignore[assignment]
     return app
 
