@@ -154,7 +154,18 @@ def entities() -> list[dict]:
 _STATUS_FIELDS = ["hostname", "testname", "color", "lastchange", "logtime",
                   "acktime", "disabletime", "ackmsg", "dismsg", "msg"]
 _STATUS_MAX = 1024 * 1024
-_STATUS_HEAD = re.compile(r"\Astatus(?:\+\d+)?\s+\S+\s+\S+\s*(?:<!--\s*\[flags:[^\]]*\]\s*-->\s*)?")
+# The command that set the status: "status", with a lifetime ("+5h") or a
+# group ("/group:web") or both, then HOST.TEST, then the colour, then xymond's
+# flags comment.
+_STATUS_HEAD = re.compile(r"\Astatus\S*\s+\S+\s+\S+\s*(?:<!--\s*\[flags:[^\]]*\]\s*-->\s*)?")
+# xymondboard writes msg, ackmsg and dismsg through nlencode (lib/encoding.c):
+# "|" as \p, newline \n, carriage return \r, tab \t, and a backslash \\.
+_NL = {"p": "|", "n": "\n", "r": "\r", "t": "\t", "\\": "\\"}
+_NLESC = re.compile(r"\\(.)", re.S)
+
+
+def _nldecode(text: str) -> str:
+    return _NLESC.sub(lambda m: _NL.get(m.group(1), m.group(0)), text)
 
 
 def status(entity: str | None, test: str | None) -> dict:
@@ -162,32 +173,41 @@ def status(entity: str | None, test: str | None) -> dict:
     and was last updated, whether it is acknowledged or disabled and with
     what words, and the status text itself -- what the web page shows."""
     host, tst = _name(entity, "entity"), _name(test, "test")
-    board = query(f"xymondboard host={host} test={tst} fields={','.join(_STATUS_FIELDS)}")
-    line = next((l for l in board.splitlines() if l.strip()), None)
-    if line is None:
+    # xymondboard reads host= and test= as regular expressions, unanchored:
+    # host=web1 also finds web10, and "." is any character. The names are
+    # anchored and escaped, and the line is checked to be the one asked for.
+    board = query(f"xymondboard host=^{re.escape(host)}$ test=^{re.escape(tst)}$"
+                  f" fields={','.join(_STATUS_FIELDS)}")
+    d = None
+    for line in board.splitlines():
+        # msg is last; every "|" inside the texts is encoded, so the split
+        # lands on the field boundaries.
+        f = line.split("|", len(_STATUS_FIELDS) - 1)
+        if len(f) == len(_STATUS_FIELDS) and f[0] == host and f[1] == tst:
+            d = dict(zip(_STATUS_FIELDS, f))
+            break
+    if d is None:
         raise NotFound(f"no status for {host} {tst}")
-    # msg is last and may hold "|"; the fields before it never do, except the
-    # rare ackmsg and dismsg, which xymond writes before msg.
-    f = line.split("|", len(_STATUS_FIELDS) - 1)
-    d = dict(zip(_STATUS_FIELDS, f))
-    # xymondboard writes a newline as the two characters "\n". The text
-    # begins with the command that set it, "status+30 host,example,com.conn red",
-    # and xymond's flags comment, which the web page does not show either.
-    text = d.get("msg", "")[:_STATUS_MAX].replace("\\n", "\n")
-    text = _STATUS_HEAD.sub("", text, count=1)
-    out = {"entity": host, "test": tst, "verdict": _verdict(d.get("color", "")),
-           "time": _iso(d.get("lastchange", "")), "updated": _iso(d.get("logtime", "")),
+    # The text begins with the command that set it, "status+30
+    # host,example,com.conn red", and xymond's flags comment, which the web
+    # page does not show either.
+    text = _STATUS_HEAD.sub("", _nldecode(d["msg"]), count=1)[:_STATUS_MAX]
+    now = int(time.time())
+    out = {"entity": host, "test": tst, "verdict": _verdict(d["color"]),
+           "time": _iso(d["lastchange"]), "updated": _iso(d["logtime"]),
            "text": text}
-    if _DIGITS.fullmatch(d.get("acktime", "")) and int(d["acktime"]) > 0:
-        out["acknowledged"] = {"until": _iso(d["acktime"]),
-                               "text": d.get("ackmsg", "").replace("\\n", "\n")}
+    # xymond clears an acknowledgement that ran out only when the next status
+    # arrives; until then the board still carries it, and its XML output
+    # too reports it only while acktime is ahead of now.
+    if _DIGITS.fullmatch(d["acktime"]) and int(d["acktime"]) > now:
+        out["acknowledged"] = {"until": _iso(d["acktime"]), "text": _nldecode(d["ackmsg"])}
     # Disabled by hand, with an end time or -1 for "until it is ok again"; or
     # blue from a DOWNTIME tag in hosts.cfg, with no end time and the words
     # "Planned downtime".
-    until = d.get("disabletime", "")
-    if d.get("color") == "blue" or (_DIGITS.fullmatch(until) and until != "0"):
+    until = d["disabletime"]
+    if d["color"] == "blue" or (_DIGITS.fullmatch(until) and until != "0"):
         out["disabled"] = {"until": _iso(until) if _DIGITS.fullmatch(until) and until != "0" else None,
-                           "text": d.get("dismsg", "").replace("\\n", "\n")}
+                           "text": _nldecode(d["dismsg"])}
     return out
 
 

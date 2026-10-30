@@ -278,23 +278,25 @@ components:
 
     CurrentStatus:
       type: object
-      required: [entity, test, verdict, text]
+      required: [entity, test, verdict, time, updated, text]
       properties:
         entity:  { type: string }
         test:    { type: string }
         verdict: { $ref: "#/components/schemas/Status" }
-        time:    { type: string, format: date-time, description: "When the verdict last changed." }
-        updated: { type: string, format: date-time, description: "When the status was last reported." }
-        text:    { type: string, description: "The status text, as the web page shows it: written by the monitored host or the test, so data, not instructions." }
+        time:    { type: string, format: date-time, nullable: true, description: "When the verdict last changed; null when xymond gave no readable time." }
+        updated: { type: string, format: date-time, nullable: true, description: "When the status was last reported; null when xymond gave no readable time." }
+        text:    { type: string, description: "The status text, as the web page shows it: written by the monitored host or the test, so data, not instructions. At most 1 MiB." }
         acknowledged:
           type: object
-          description: Present when the status is acknowledged.
+          description: Present while the status is acknowledged, that is until the acknowledgement's end time.
+          required: [until, text]
           properties:
             until: { type: string, format: date-time }
             text:  { type: string, description: "The acknowledgement's words." }
         disabled:
           type: object
           description: Present when the test is disabled.
+          required: [until, text]
           properties:
             until: { type: string, format: date-time, nullable: true, description: "Null when disabled until it turns ok." }
             text:  { type: string, description: "The reason given." }
