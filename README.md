@@ -94,7 +94,8 @@ sh xymon-setup.sh
 ```
 
 It carries the API's address and your user name, and never the password.
-It clones this repository, runs `make install-client`, makes a virtualenv
+It clones this repository at the commit the server was installed from, so
+both sides run the same code, runs `make install-client`, makes a virtualenv
 with the `mcp` module, asks for your password once into
 `~/.config/xymon-api/xymon.password`, checks `/health` answers, and
 registers the MCP server with Claude Code. `?name=xymon-lab` gives a second

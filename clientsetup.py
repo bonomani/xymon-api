@@ -18,6 +18,11 @@ import time
 
 REPO = os.environ.get("XYMONAPI_REPO", "https://github.com/bonomani/xymon-api")
 PUBLIC_URL = os.environ.get("XYMONAPI_PUBLIC_URL", "").rstrip("/")
+# The commit this API was installed from, written beside this file by make
+# install when it ran in a git checkout: the laptop then gets the same code,
+# not whatever is newest. Absent (a tarball), the script takes the newest.
+_COMMIT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "COMMIT")
+_HEX = re.compile(r"[0-9a-f]{7,64}")
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
 SCRIPT = """#!/bin/sh
@@ -33,6 +38,7 @@ set -eu
 URL={url_q}
 USER={user_q}
 NAME={name_q}
+REF={ref_q}
 PREFIX=${{1:-${{PREFIX:-$HOME/.local}}}}
 SRC=${{XYMONAPI_SRC:-$HOME/src/xymon-api}}
 PASSFILE=${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/$NAME.password
@@ -52,9 +58,19 @@ command -v "$PYTHON" >/dev/null 2>&1 || die "$PYTHON is needed: Python 3.10 or l
 
 say "the code, in $SRC"
 if [ -d "$SRC/.git" ]; then
-	git -C "$SRC" pull -q --ff-only
+	git -C "$SRC" fetch -q --tags origin
 else
 	git clone -q {repo_q} "$SRC"
+fi
+# The commit the API was installed from, so both sides run the same code;
+# without one, or one the repository no longer has, the newest. Detached, so
+# a branch checked out there is left as it is.
+if [ -n "$REF" ] && git -C "$SRC" rev-parse -q --verify "$REF^{{commit}}" >/dev/null; then
+	git -C "$SRC" checkout -q --detach "$REF"
+else
+	[ -n "$REF" ] && echo "{repo} has no commit $REF, the one the API was installed from; taking its newest code"
+	git -C "$SRC" remote set-head origin -a >/dev/null
+	git -C "$SRC" checkout -q --detach origin/HEAD
 fi
 
 say "the client, under $PREFIX"
@@ -89,12 +105,14 @@ else
 	curlcfg=""
 fi
 
+# The options that depend on what is here are built as the positional
+# parameters: sh has no arrays, and a path with a space stays one word.
 ca=""
-[ -s "$CAFILE" ] && ca="--cacert $CAFILE"
+set --
+[ -s "$CAFILE" ] && ca=1 && set -- --cacert "$CAFILE"
 
 say "does the API answer?"
-# shellcheck disable=SC2086 # ca is two words, or none
-health=$(printf '%s\\n' "$curlcfg" | curl -sS -K - --max-time 15 $ca "$URL/xymon/api/v1/health" 2>"$HOME/.xymon-setup.err") || {{
+health=$(printf '%s\\n' "$curlcfg" | curl -sS -K - --max-time 15 "$@" "$URL/xymon/api/v1/health" 2>"$HOME/.xymon-setup.err") || {{
 	grep -qi 'certificate' "$HOME/.xymon-setup.err" && die "$URL has a certificate this machine does not trust: copy the server's certificate, or the CA that signed it, to $CAFILE and run this again"
 	die "no answer from $URL: $(cat "$HOME/.xymon-setup.err")"
 }}
@@ -109,13 +127,10 @@ esac
 if command -v claude >/dev/null 2>&1; then
 	say "registering the MCP server with Claude Code as $NAME"
 	claude mcp remove --scope user "$NAME" >/dev/null 2>&1 || true
-	# shellcheck disable=SC2046
-	claude mcp add --scope user "$NAME" \\
-		-e XYMONAPI_URL="$URL" \\
-		$( [ -n "$USER" ] && printf -- '-e XYMONAPI_USER=%s -e XYMONAPI_PASSWORD_FILE=%s' "$USER" "$PASSFILE" ) \\
-		$( [ -n "$ca" ] && printf -- '-e XYMONAPI_CA=%s' "$CAFILE" ) \\
-		-e XYMONAPI_PYTHON="$VENV/bin/python3" \\
-		-- "$PREFIX/bin/xymonapi-mcp"
+	set -- --scope user "$NAME" -e XYMONAPI_URL="$URL"
+	[ -n "$USER" ] && set -- "$@" -e XYMONAPI_USER="$USER" -e XYMONAPI_PASSWORD_FILE="$PASSFILE"
+	[ -n "$ca" ] && set -- "$@" -e XYMONAPI_CA="$CAFILE"
+	claude mcp add "$@" -e XYMONAPI_PYTHON="$VENV/bin/python3" -- "$PREFIX/bin/xymonapi-mcp"
 else
 	say "Claude Code is not here; to register the MCP server later:"
 	echo "  claude mcp add --scope user $NAME -e XYMONAPI_URL=$URL \\\\"
@@ -165,9 +180,21 @@ def valid_name(name: str | None) -> str:
     return name
 
 
+def installed_commit() -> str:
+    """The commit in the COMMIT file beside this module, or ""."""
+    try:
+        with open(_COMMIT, encoding="ascii") as fd:
+            ref = fd.readline().strip()
+    except (OSError, UnicodeDecodeError):
+        return ""
+    return ref if _HEX.fullmatch(ref) else ""
+
+
 def render(url: str, user: str, name: str, fmt: str) -> str:
     passfile = f"${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/{name}.password"
+    ref = installed_commit()
     vars_ = dict(url=url, url_q=shlex.quote(url), user=user, user_q=shlex.quote(user),
+                 ref=ref, ref_q=shlex.quote(ref),
                  user_or_none=user or "(none: the API asks for no password)",
                  name=name, name_q=shlex.quote(name), repo=REPO, repo_q=shlex.quote(REPO),
                  passfile_q=passfile, script=f"{name}-setup.sh",

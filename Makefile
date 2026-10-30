@@ -40,6 +40,7 @@ install:
 	cp -f $(API) "$(EXT)/"
 	chmod 644 "$(EXT)/app.py" "$(EXT)/xymon.py" "$(EXT)/clientsetup.py" "$(EXT)/openapi.yaml" "$(EXT)/requirements.txt"
 	chmod 755 "$(EXT)/xymonapi.sh"
+	$(call commit)
 	cp -f $(RAG) "$(EXT)/rag/"
 	cp -f mcp-server/client.py "$(EXT)/mcp-server/"
 	chmod 644 "$(EXT)/rag/xymonrag.py" "$(EXT)/rag/requirements.txt" "$(EXT)/mcp-server/client.py"
@@ -81,6 +82,17 @@ define conf
 	else \
 		cp "$(1)" "$(DESTDIR)$(XYMONHOME)/etc/"; \
 		chmod 644 "$(DESTDIR)$(XYMONHOME)/etc/$(1)"; \
+	fi
+endef
+
+# commit -- write the commit this checkout is at to $(EXT)/COMMIT, which the
+# /client script reads so a laptop fetches the same code; from a tarball,
+# where there is no git, any COMMIT a previous install left is removed.
+define commit
+	@if c=$$(git rev-parse HEAD 2>/dev/null); then \
+		printf '%s\n' "$$c" > "$(EXT)/COMMIT"; chmod 644 "$(EXT)/COMMIT"; \
+	else \
+		rm -f "$(EXT)/COMMIT"; \
 	fi
 endef
 

@@ -40,6 +40,9 @@ for f in app.py xymon.py openapi.yaml requirements.txt xymonapi.sh; do
 	assert_file_exists "$home/ext/xymonapi/$f"
 done
 [ -x "$home/ext/xymonapi/xymonapi.sh" ] || fail "the launcher is not executable"
+# Installed from a git checkout, the commit is recorded for the /client script.
+assert_file_exists "$home/ext/xymonapi/COMMIT"
+assert_equal "$(git -C "$ROOT" rev-parse HEAD)" "$(cat "$home/ext/xymonapi/COMMIT")" "COMMIT holds this checkout's commit"
 assert_file_exists "$work/man/man8/xymonapi.8"
 
 task=$home/etc/tasks.d/xymonapi
