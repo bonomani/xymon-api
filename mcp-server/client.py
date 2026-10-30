@@ -6,12 +6,16 @@ XYMONAPI_URL is where the API is, http://127.0.0.1:1986 by default.
 XYMONAPI_USER and XYMONAPI_PASSWORD are sent when the API asks for a user;
 XYMONAPI_PASSWORD_FILE names a file holding the password instead, for an
 environment that other programs read too, as xymonserver.cfg's is.
+XYMONAPI_CA names the certificate, or the CA, to trust for an https:// URL
+when it is not one the system trusts already: xymond's own, from
+xymon-tls(7), which the API uses too.
 """
 from __future__ import annotations
 
 import base64
 import json
 import os
+import ssl
 import urllib.error
 import urllib.request
 from urllib.parse import urlencode, urlsplit
@@ -20,6 +24,7 @@ URL = os.environ.get("XYMONAPI_URL", "http://127.0.0.1:1986").rstrip("/")
 USER = os.environ.get("XYMONAPI_USER", "")
 PASSWORD = os.environ.get("XYMONAPI_PASSWORD", "")
 PASSWORD_FILE = os.environ.get("XYMONAPI_PASSWORD_FILE", "")
+CA = os.environ.get("XYMONAPI_CA", "")
 
 
 def _password() -> str:
@@ -50,7 +55,19 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-_opener = urllib.request.build_opener(_NoRedirect)
+def _context() -> ssl.SSLContext:
+    """Full verification, against XYMONAPI_CA when set, the system's store
+    otherwise. Never less: the password rides on this connection."""
+    ctx = ssl.create_default_context()
+    if CA:
+        try:
+            ctx.load_verify_locations(CA)
+        except (OSError, ssl.SSLError) as e:
+            raise APIError(f"cannot use XYMONAPI_CA={CA}: {e}") from e
+    return ctx
+
+
+_opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=_context()))
 # An answer of the API is a board or a list of events: never near this.
 MAX_BODY = 16 * 1024 * 1024
 
@@ -82,9 +99,13 @@ def api(path: str, **params: str | None) -> dict:
                        " -- set XYMONAPI_USER and XYMONAPI_PASSWORD_FILE (or XYMONAPI_PASSWORD)")
         raise APIError(f"xymonapi answered {e.code}: {detail}", e.code) from e
     except urllib.error.URLError as e:
+        if isinstance(e.reason, ssl.SSLCertVerificationError):
+            raise APIError(f"xymonapi at {URL} has a certificate this machine does not trust: "
+                           f"{e.reason.verify_message} -- name the server's certificate, or the "
+                           "CA that signed it, in XYMONAPI_CA") from e
         raise APIError(f"cannot reach xymonapi at {URL}: {e.reason} -- is the API running, and "
-                       "XYMONAPI_URL right? From another machine it is reached through the web "
-                       "server in front of it, as xymonapi(8) says") from e
+                       "XYMONAPI_URL right? From another machine it is reached over HTTPS, "
+                       "as xymonapi(8) says") from e
     except ValueError as e:              # a URL urllib cannot use, or an answer that is not JSON
         raise APIError(f"xymonapi at {URL}: {e}") from e
     except OSError as e:                 # the connection broke, or timed out, while reading

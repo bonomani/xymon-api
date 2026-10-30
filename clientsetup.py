@@ -36,6 +36,10 @@ NAME={name_q}
 PREFIX=${{1:-${{PREFIX:-$HOME/.local}}}}
 SRC=${{XYMONAPI_SRC:-$HOME/src/xymon-api}}
 PASSFILE=${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/$NAME.password
+# The server's certificate, or the CA that signed it, when it is not one
+# this machine trusts already -- xymond's own, as xymon-tls(7) sets it up.
+# Copy it here first, and it is used for the check below and registered.
+CAFILE=${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/$NAME-ca.pem
 
 say() {{ printf '\\n== %s\\n' "$*"; }}
 die() {{ printf 'xymon-setup: %s\\n' "$*" >&2; exit 1; }}
@@ -81,9 +85,16 @@ else
 	auth=""
 fi
 
+ca=""
+[ -s "$CAFILE" ] && ca="--cacert $CAFILE"
+
 say "does the API answer?"
-# shellcheck disable=SC2086 # auth is two words, or none
-health=$(curl -sS --max-time 15 $auth "$URL/xymon/api/v1/health") || die "no answer from $URL: is it the HTTPS address of the web server in front of the API, or an SSH tunnel to it?"
+# shellcheck disable=SC2086 # auth and ca are two words each, or none
+health=$(curl -sS --max-time 15 $auth $ca "$URL/xymon/api/v1/health" 2>"$HOME/.xymon-setup.err") || {{
+	grep -qi 'certificate' "$HOME/.xymon-setup.err" && die "$URL has a certificate this machine does not trust: copy the server's certificate, or the CA that signed it, to $CAFILE and run this again"
+	die "no answer from $URL: $(cat "$HOME/.xymon-setup.err")"
+}}
+rm -f "$HOME/.xymon-setup.err"
 case $health in
 	*'"alive":true'*) echo "yes: $health" ;;
 	*'"alive":false'*) echo "the API answers, but its xymond does not: $health" ;;
@@ -98,19 +109,21 @@ if command -v claude >/dev/null 2>&1; then
 	claude mcp add --scope user "$NAME" \\
 		-e XYMONAPI_URL="$URL" \\
 		$( [ -n "$USER" ] && printf -- '-e XYMONAPI_USER=%s -e XYMONAPI_PASSWORD_FILE=%s' "$USER" "$PASSFILE" ) \\
+		$( [ -n "$ca" ] && printf -- '-e XYMONAPI_CA=%s' "$CAFILE" ) \\
 		-e XYMONAPI_PYTHON="$VENV/bin/python3" \\
 		-- "$PREFIX/bin/xymonapi-mcp"
 else
 	say "Claude Code is not here; to register the MCP server later:"
 	echo "  claude mcp add --scope user $NAME -e XYMONAPI_URL=$URL \\\\"
 	[ -n "$USER" ] && echo "    -e XYMONAPI_USER=$USER -e XYMONAPI_PASSWORD_FILE=$PASSFILE \\\\"
+	[ -n "$ca" ] && echo "    -e XYMONAPI_CA=$CAFILE \\\\"
 	echo "    -e XYMONAPI_PYTHON=$VENV/bin/python3 -- $PREFIX/bin/xymonapi-mcp"
 fi
 
 say "done"
 cat <<EOF
 From a shell, with these in the environment:
-  export XYMONAPI_URL=$URL${{USER:+ XYMONAPI_USER=$USER XYMONAPI_PASSWORD_FILE=$PASSFILE}}
+  export XYMONAPI_URL=$URL${{USER:+ XYMONAPI_USER=$USER XYMONAPI_PASSWORD_FILE=$PASSFILE}}${{ca:+ XYMONAPI_CA=$CAFILE}}
   $PREFIX/bin/xymonapi-rag search "what does purple mean"
 In Claude Code, just ask: "which hosts are red?"
 EOF
@@ -132,7 +145,8 @@ def public_url(headers, request_url: str) -> str:
         return PUBLIC_URL
     host = headers.get("x-forwarded-host") or headers.get("host") or "127.0.0.1:1986"
     host = host.split(",")[0].strip()
-    scheme = (headers.get("x-forwarded-proto") or request_url.split(":", 1)[0]).split(",")[0].strip()
+    own = "https" if os.environ.get("XYMONAPI_TLS") else request_url.split(":", 1)[0]
+    scheme = (headers.get("x-forwarded-proto") or own).split(",")[0].strip()
     if scheme not in ("http", "https"):
         scheme = "http"
     return f"{scheme}://{host}"

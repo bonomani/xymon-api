@@ -73,6 +73,9 @@ grep -qF "ENVFILE $odd/etc/xymonserver.cfg" "$odd/etc/tasks.d/xymonapi-rag" \
 
 assert_file_exists "$home/etc/xymonapi-apache.conf"
 grep -q 'ProxyPass ' "$home/etc/xymonapi-apache.conf" || fail "the Apache snippet has no ProxyPass"
+grep -q 'proxy_pass ' "$home/etc/xymonapi-nginx.conf" || fail "the nginx snippet has no proxy_pass"
+grep -q 'proxy.server' "$home/etc/xymonapi-lighttpd.conf" || fail "the lighttpd snippet has no proxy.server"
+assert_contains 'Installed. Enable the API' "$(cat "$work/install.log")" "make install says what to do next"
 echo "# mine" > "$home/etc/xymonapi-apache.conf"
 "$make" -C "$ROOT" install XYMONHOME="$home" MANDIR="$work/man" >/dev/null 2>&1 || fail "a third install failed"
 assert_equal "# mine" "$(cat "$home/etc/xymonapi-apache.conf")" "an edited Apache snippet is kept"

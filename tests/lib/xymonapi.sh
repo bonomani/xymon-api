@@ -28,11 +28,20 @@ fi
 
 API_PORT=""
 API_PID=""
+# With XYMONAPI_TLS_CERT in the environment the API speaks HTTPS, and curl
+# must trust that certificate: a self-signed one is its own CA.
+API_SCHEME="http"
+API_CURL="curl -s"
 
 # start_api -- start the API on a port of its own and wait until it answers.
 # A port that turned out to be taken is a retry.
 start_api() {
 	local deadline rc
+	if [ -n "${XYMONAPI_TLS_CERT:-}" ]; then
+		API_SCHEME="https"; API_CURL="curl -s --cacert $XYMONAPI_TLS_CERT"
+	else
+		API_SCHEME="http"; API_CURL="curl -s"
+	fi
 	for _ in 1 2 3; do
 		API_PORT=$(free_port) || fail "no free port for the API"
 		# The index /search reads: the test's own, never the one in this
@@ -49,7 +58,8 @@ start_api() {
 				grep -q 'address already in use' "$work/api.log" && continue 2
 				fail "the API exited with $rc: $(tail -n 5 "$work/api.log")"
 			fi
-			curl -s --max-time 5 -o /dev/null "http://127.0.0.1:$API_PORT/xymon/api/v1/health" && return 0
+			# shellcheck disable=SC2086 # API_CURL is a command with options
+			$API_CURL --max-time 5 -o /dev/null "$API_SCHEME://127.0.0.1:$API_PORT/xymon/api/v1/health" && return 0
 			sleep 0.2
 		done
 		fail "the API did not answer within 60 seconds: $(tail -n 5 "$work/api.log")"
@@ -59,12 +69,14 @@ start_api() {
 
 # api_get PATH -- the body the API answers for PATH, under /xymon/api/v1.
 api_get() {
-	curl -s --max-time 30 "http://127.0.0.1:$API_PORT/xymon/api/v1$1"
+	# shellcheck disable=SC2086
+	$API_CURL --max-time 30 "$API_SCHEME://127.0.0.1:$API_PORT/xymon/api/v1$1"
 }
 
 # api_code PATH -- the HTTP status the API answers for PATH.
 api_code() {
-	curl -s --max-time 30 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT/xymon/api/v1$1"
+	# shellcheck disable=SC2086
+	$API_CURL --max-time 30 -o /dev/null -w '%{http_code}' "$API_SCHEME://127.0.0.1:$API_PORT/xymon/api/v1$1"
 }
 
 # mcp URL REQUEST... -- run the MCP server for the API at URL, send it the

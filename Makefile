@@ -51,12 +51,11 @@ install:
 	mkdir -p "$(TASKDIR)"
 	$(call task,xymonapi.tasks.DIST,xymonapi)
 	$(call task,rag/xymonapi-rag.tasks.DIST,xymonapi-rag)
-	@if [ -e "$(DESTDIR)$(XYMONHOME)/etc/xymonapi-apache.conf" ]; then \
-		echo "keeping $(DESTDIR)$(XYMONHOME)/etc/xymonapi-apache.conf"; \
-	else \
-		cp xymonapi-apache.conf "$(DESTDIR)$(XYMONHOME)/etc/"; \
-		chmod 644 "$(DESTDIR)$(XYMONHOME)/etc/xymonapi-apache.conf"; \
-	fi
+	$(call conf,xymonapi-apache.conf)
+	$(call conf,xymonapi-nginx.conf)
+	$(call conf,xymonapi-lighttpd.conf)
+	@echo "Installed. Enable the API: remove DISABLED from $(TASKDIR)/xymonapi. For other machines, include one of"
+	@echo "  $(DESTDIR)$(XYMONHOME)/etc/xymonapi-{apache,nginx,lighttpd}.conf in the web server, or give the API xymond's certificate: see xymonapi(8)."
 
 # The client side, where no Xymon is: the MCP server and the search
 # commands, in PREFIX/libexec/xymonapi, with two commands in PREFIX/bin
@@ -73,6 +72,17 @@ install-client:
 	chmod 755 "$(DESTDIR)$(PREFIX)/bin/xymonapi-mcp" "$(DESTDIR)$(PREFIX)/bin/xymonapi-rag"
 	cp -f mcp-server/xymonapi-mcp.1 rag/xymonapi-rag.1 "$(DESTDIR)$(PREFIX)/share/man/man1/"
 	chmod 644 "$(DESTDIR)$(PREFIX)/share/man/man1/xymonapi-mcp.1" "$(DESTDIR)$(PREFIX)/share/man/man1/xymonapi-rag.1"
+
+# conf FILE -- copy FILE to $XYMONHOME/etc unless it is there already: an
+# admin's edits to a web server snippet are kept, as a task file is.
+define conf
+	@if [ -e "$(DESTDIR)$(XYMONHOME)/etc/$(1)" ]; then \
+		echo "keeping $(DESTDIR)$(XYMONHOME)/etc/$(1)"; \
+	else \
+		cp "$(1)" "$(DESTDIR)$(XYMONHOME)/etc/"; \
+		chmod 644 "$(DESTDIR)$(XYMONHOME)/etc/$(1)"; \
+	fi
+endef
 
 # task DIST NAME -- write DIST as $(TASKDIR)/NAME, with @XYMONHOME@ replaced,
 # unless NAME is there already. The replacement is escaped for sed first: a

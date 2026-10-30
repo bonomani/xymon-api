@@ -39,5 +39,24 @@ listen=${XYMONAPI_LISTEN:-127.0.0.1:1986}
 port=${listen##*:}
 host=`echo "${listen%:*}" | sed -e 's/^\[//' -e 's/\]$//'`
 
+# TLS, with xymond's own certificate and key (xymon-tls(7)) unless others
+# are named: when both files are there the API speaks HTTPS, when neither is
+# it speaks HTTP, and one without the other is a mistake to report. A key
+# that others can read is refused, as xymond refuses it.
+cert=${XYMONAPI_TLS_CERT:-${XYMONHOME:-/nonexistent}/etc/tls/xymond.pem}
+key=${XYMONAPI_TLS_KEY:-${XYMONHOME:-/nonexistent}/etc/tls/xymond.key}
+tls=""
+if [ -n "$XYMONAPI_TLS_CERT$XYMONAPI_TLS_KEY" ] || [ -e "$cert" ] || [ -e "$key" ]; then
+	[ -r "$cert" ] || { echo "xymonapi: cannot read the TLS certificate $cert (XYMONAPI_TLS_CERT)" >&2; exit 1; }
+	[ -r "$key" ] || { echo "xymonapi: cannot read the TLS key $key (XYMONAPI_TLS_KEY)" >&2; exit 1; }
+	case `ls -ld "$key" | cut -c5-10` in
+		------) ;;
+		*) echo "xymonapi: the TLS key $key is readable by others; make it mode 600" >&2; exit 1 ;;
+	esac
+	tls="--ssl-certfile $cert --ssl-keyfile $key"
+	export XYMONAPI_TLS=1
+fi
+
 cd "$here" || exit 1
-exec "$PYTHON" -m uvicorn --host "$host" --port "$port" --no-access-log app:app
+# shellcheck disable=SC2086 # tls is two options and their files, or nothing
+exec "$PYTHON" -m uvicorn --host "$host" --port "$port" --no-access-log $tls app:app

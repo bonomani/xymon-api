@@ -56,7 +56,7 @@ It writes into the Xymon server directory, so it is normally run as root.
 | `$XYMONHOME/etc/tasks.d/xymonapi`, the task, written `DISABLED` | `xymonapi.tasks.DIST`, with `@XYMONHOME@` replaced |
 | `$XYMONHOME/ext/xymonapi/rag/`, the search and its launcher, and `mcp-server/client.py` it reads the API with | `rag/xymonrag.py`, `xymonapi-rag.sh`, `requirements.txt`, `mcp-server/client.py` |
 | `$XYMONHOME/etc/tasks.d/xymonapi-rag`, the daily index task, written `DISABLED` | `rag/xymonapi-rag.tasks.DIST` |
-| `$XYMONHOME/etc/xymonapi-apache.conf`, the proxy snippet for other machines, written once | `xymonapi-apache.conf` |
+| `$XYMONHOME/etc/xymonapi-{apache,nginx,lighttpd}.conf`, the web server snippets, written once | the files of the same name |
 | `$MANDIR/man8/xymonapi.8`, `$MANDIR/man1/xymonapi-rag.1` | the pages of the same name |
 
 Xymon's own install links `$XYMONHOME/ext` and `$XYMONHOME/etc` to wherever
@@ -118,12 +118,14 @@ manual page named.
 | setting | meaning | default |
 |---|---|---|
 | `XYMONAPI_LISTEN` | where the API listens, HOST:PORT | `127.0.0.1:1986` |
-| `XYMONAPI_PASSWD` | an htpasswd file; set, every request needs a user from it | none: no password |
+| `XYMONAPI_PASSWD` | an htpasswd file; every request needs a user from it; empty for none | Xymon's `etc/xymonpasswd` when it exists |
+| `XYMONAPI_TLS_CERT`, `_KEY` | a certificate and key; with them the API speaks HTTPS | xymond's `etc/tls/xymond.pem` and `.key` when they exist |
 | `XYMONAPI_HIDE` | a file of regular expressions; what they match is `[hidden]` in every text returned | none |
 | `XYMONAPI_PYTHON` | the Python 3.10+ to run with | `python3` on PATH |
 | `XYMONAPI_URL` | where the API is, for the MCP server and the search | `http://127.0.0.1:1986` |
 | `XYMONAPI_USER`, `XYMONAPI_PASSWORD` | the user and password they send | none |
 | `XYMONAPI_PASSWORD_FILE` | the password from the first line of this file instead | none |
+| `XYMONAPI_CA` | the certificate, or CA, to trust for an https:// API the system does not trust already | the system's store |
 | `XYMONAPI_RAG_DOCS` | a directory of manual pages to index | none |
 | `XYMONAPI_RAG_INDEX` | the index file | `~/.cache/xymonapi-rag/index.npz` |
 | `XYMONAPI_RAG_SINCE` | how far back the history is indexed | `-30d` |
@@ -133,39 +135,47 @@ manual page named.
 | `XYMONAPI_RAG_LLM_URL`, `_MODEL`, `_KEY` | the language model `ask` uses: any OpenAI-compatible server, Ollama or LM Studio | a local Ollama, `llama3.1`, no key |
 | `XYMONAPI_RAG_LLM_MAX_TOKENS`, `_TIMEOUT` | the model's token budget, and how long `ask` waits | `2048`, `300` seconds |
 
-The first four are `xymonapi.8`'s; the next three `xymonapi-mcp.1`'s; the
+The first six are `xymonapi.8`'s; the next four `xymonapi-mcp.1`'s; the
 rest `xymonapi-rag.1`'s, and the API reads `XYMONAPI_RAG_INDEX`, `_MODEL`
 and `_OFFLINE` too, for `/search`.
 
 ## Reaching the API from elsewhere
 
 Xymon is what you look at when the rest is down, so the API depends on
-nothing central: no directory, no certificate authority, no DNS. It speaks
-plain HTTP, as xymond does on 1984, and listens on 127.0.0.1 unless told
-otherwise. Encryption is a choice, and the rule of thumb is: do as you do
-for the Xymon web pages. From another machine, one of:
+nothing central: no directory, no certificate authority it must reach, no
+DNS. Its password file and its certificate are Xymon's own, files on the
+server. It listens on 127.0.0.1 unless told otherwise. From another
+machine, use HTTPS, one of:
 
-- **The API's own port, open**: `XYMONAPI_LISTEN="0.0.0.0:1986"` on the
-  server, `XYMONAPI_URL=http://xymon-server:1986` on the laptop. Simplest,
-  unencrypted: right where the Xymon pages are plain HTTP on a trusted
-  network, wrong across the Internet.
+- **The API's own HTTPS.** Where the server has TLS for the Xymon protocol
+  (`xymon-tls(7)`, Xymon 4.3.33), the API finds xymond's certificate and
+  key in `etc/tls/` and speaks HTTPS on 1986 by itself; or name any
+  certificate and key in `XYMONAPI_TLS_CERT` and `_KEY`. Open the port
+  (`XYMONAPI_LISTEN="0.0.0.0:1986"`), then `XYMONAPI_URL=https://server:1986`
+  on the laptop, with `XYMONAPI_CA` naming that certificate when it is
+  self-signed. No web server in the path.
+- **The web server in front of it.** `make install` writes
+  `etc/xymonapi-apache.conf`, `-nginx.conf` and `-lighttpd.conf`, each
+  passing `/xymon/api/` to the API. Include the one for your server where
+  its Xymon configuration is, in the HTTPS part. Then
+  `XYMONAPI_URL=https://xymon.example.ch`, one hostname for pages and API.
 - **An SSH tunnel**, for one person: `ssh -L 1986:127.0.0.1:1986 xymon-server`,
   then `XYMONAPI_URL=http://127.0.0.1:1986` as if local. Encrypted,
-  nothing to set up on the server.
-- **The web server in front of it**, for everyone, encrypted where it is:
-  `make install` writes `$XYMONHOME/etc/xymonapi-apache.conf`, a `ProxyPass`
-  of `/xymon/api/` to the API. Include it next to `xymon-apache.conf`,
-  enable `mod_proxy` and `mod_proxy_http`, and set `XYMONAPI_PASSWD` so the
-  API asks for a password. Then `XYMONAPI_URL=https://xymon.example.ch`.
+  nothing to set up.
+
+Plain HTTP across a network (`XYMONAPI_LISTEN="0.0.0.0:1986"` with no
+certificate) carries the password and the status texts readable, as port
+1984 does: keep it to a network where the Xymon pages themselves are plain
+and trusted.
 
 Whichever you choose, keep the secrets out of the texts: the API is
 read-only and shows what the web pages show, and a process list can carry
 a password typed on a command line. `XYMONAPI_HIDE` names a file of
 regular expressions whose matches come out as `[hidden]`, on every text and
-in the search index built from them. And give each person a user of their
-own in the htpasswd file, so the password is theirs alone.
+in the search index built from them. The password file is Xymon's own, so
+each person has the user they have for the web pages.
 
-Either way, check from the laptop before anything else:
+Check from the laptop before anything else:
 
 ```sh
 curl -u me https://xymon.example.ch/xymon/api/v1/health
@@ -174,66 +184,6 @@ curl -u me https://xymon.example.ch/xymon/api/v1/health
 Its `search` field says whether the server has an index, how big, and how
 old. When the MCP server cannot reach the API, or is refused, its error says
 which setting to look at first.
-
-## Pitfalls seen in practice
-
-From an install on a Homebrew Xymon (`xymon-server-preview`) on macOS, with
-Apache on port 8080. Check each against your server:
-
-- **Enabling**: delete the `DISABLED` line from `etc/tasks.d/xymonapi`.
-  xymonlaunch picks up the change on its own.
-- **Python and rrdtool**: `xymonserver.cfg` sets its own PATH. There, `python3`
-  was the system's 3.9 and `rrdtool` was missing, so the task exited 77 and
-  `/series` failed. Name a 3.10+ in `XYMONAPI_PYTHON` and append the right
-  directory to PATH.
-- **Graphs**: `XYMONSERVERCGIURL` is a path, so the API prefixes
-  `XYMONWEBHOST`, that is `http://$XYMONSERVERWWWNAME`. Put the port in
-  `XYMONSERVERWWWNAME` when the web server is not on 80: `localhost:8080`.
-- **Password**: the htpasswd file `xymon-apache.conf` names may not exist
-  yet. Create it with `htpasswd -cB FILE USER` and name it in
-  `XYMONAPI_PASSWD`. It is read on every request: no restart after a change.
-- **The index task's password**: it reads `xymonserver.d/`, which every Xymon
-  program and CGI loads, so a password there is in all their environments,
-  and a file there that only the Xymon user can read may stop a CGI running
-  as the web server's user from loading its settings. Put the password in a
-  file of its own, mode 600, and name it in `XYMONAPI_PASSWORD_FILE`.
-- **Tasks at start-up**: xymonlaunch starts every task within seconds of
-  boot, and a task that then exits is not run again until its INTERVAL has
-  passed. The index task hit a not-yet-listening API this way, so it `NEEDS
-  xymonapi` and the indexer waits a minute for an API that gives no answer.
-  Also, editing a file under `tasks.d/` does not make xymonlaunch reload:
-  `touch tasks.cfg` does, and a task is restarted only when its definition
-  changed, comments aside.
-- **The last half hour of `/series`**: `xymond_rrd` keeps updates in memory
-  for 30 minutes before it writes them (`xymond_rrd(8)`, `--no-cache`), and
-  writes early only when a graph is shown. `/series` reads the files, so its
-  last points can be up to 30 minutes behind what Xymon knows, and null at
-  the end does not mean the test stopped. `/graphs` asks showgraph, which
-  has the cache written first, so it is current; or run `xymond_rrd` with
-  `--no-cache` in `tasks.cfg`.
-- **Restarting the API by hand**: xymonlaunch counts a task killed by a
-  signal as a failure, and after more than five holds it for ten minutes
-  from its last start. Kill the API a few times in a row, to pick up a
-  change for instance, and it stays down until then. Touching `tasks.cfg`
-  does not help; changing the task's definition does.
-- **Homebrew**: `$XYMONHOME/ext` is inside the Cellar, so `brew upgrade`
-  drops `ext/xymonapi`. Run `make install` again. The task file and settings
-  under `/opt/homebrew/etc` survive.
-
-The settings file that came out of it, `etc/xymonserver.d/xymonapi.cfg`:
-
-```sh
-XYMONAPI_PYTHON="/Users/me/.pyenv/versions/3.12.3/bin/python3"
-XYMONAPI_LISTEN="127.0.0.1:1986"
-XYMONAPI_PASSWD="/opt/homebrew/opt/xymon-server-preview/server/etc/xymonpasswd"
-PATH="$PATH:/opt/homebrew/bin"
-# For the daily index task
-XYMONAPI_URL="http://127.0.0.1:1986"
-XYMONAPI_USER="me"
-XYMONAPI_PASSWORD_FILE="/opt/homebrew/etc/xymon-preview/xymonapi.password"
-XYMONAPI_RAG_DOCS="/opt/homebrew/opt/xymon-server-preview/share/man"
-XYMONAPI_RAG_LLM_MODEL="llama3.2"   # the model this Ollama has pulled
-```
 
 ## MCP server
 
@@ -262,9 +212,8 @@ two Xymon servers, register twice under two names, `xymon-prod` and
 answer a tool error until the server has an index.
 
 For an API on another machine, see
-[Reaching the API from elsewhere](#reaching-the-api-from-elsewhere): over
-plain HTTP the password crosses the network in the clear, which is fine
-where the Xymon pages are plain too and not elsewhere.
+[Reaching the API from elsewhere](#reaching-the-api-from-elsewhere): HTTPS,
+with `XYMONAPI_CA` when the certificate is the server's own.
 
 Every tool and setting is in
 [`mcp-server/xymonapi-mcp.1`](mcp-server/xymonapi-mcp.1).
@@ -314,20 +263,21 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through |
+| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled; `XYMONAPI_HIDE` blanks secrets, and a bad expression stops the API |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
 | `xymonapi-series` | `/series` reads an RRD, an HTTP test's too, answers 404 and 400 as documented, and refuses names that leave `XYMONRRDS` |
 | `xymonapi-graphs` | `/graphs` reaches `showgraph.sh` through `XYMONWEBHOST` when `XYMONSERVERCGIURL` is a path |
-| `xymonapi-install` | `make install` lays out the files, the Apache snippet included, keeps what the admin edited; `make install-client` lays out the laptop side |
+| `xymonapi-install` | `make install` lays out the files, the web server snippets included, keeps what the admin edited; `make install-client` lays out the laptop side |
 | `xymonapi-mcp` | the MCP server's eight tools answer with the API's board, are read-only, tell the model a status text is data, and say what to check when the API is out of reach |
 | `xymonapi-rag` | the search finds the right manual page and history passage, from the index here or the API's; `/search` and `/health` serve the index and see it change; `index` embeds only what is new; `eval` scores; `ask` reaches a language model |
 | `xymonapi-rag-eval` | ten questions about Xymon's own manual pages, all of them, score at least 8 |
 | `xymonapi-rag-startup` | `index` waits for an API that is not up yet, and not for one that refuses it |
+| `xymonapi-tls` | with xymond's certificate the API speaks HTTPS, `/client` says so, the MCP client trusts `XYMONAPI_CA`, a readable key refuses to start |
 
 They need `bash`, `curl`, and the Python modules of all three
 `requirements.txt` -- the API's, `mcp-server/`'s and `rag/`'s -- for `python3`,
-or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool` or Apache's
+or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool`, `openssl` or Apache's
 `htpasswd`. The web server and the language model are stand-ins under
 `tests/lib/`; the embedding model is the real one, downloaded once, about
 65 MB. A test skips (exit 77) when something it needs is missing, and says

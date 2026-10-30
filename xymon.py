@@ -439,7 +439,13 @@ def histlog(entity: str | None, test: str | None, when: str | None) -> dict:
 # keep with Apache's htpasswd. That program checks the password too, so every
 # format it writes is understood here without a hashing library: $apr1$ by
 # default, bcrypt, SHA. The password goes on its stdin, never its command line.
-XYMONAPI_PASSWD = os.environ.get("XYMONAPI_PASSWD", "")
+# Xymon's own password file, the one its web pages and useradm.cgi use, is
+# the default when it exists: the API then asks for what the pages ask for.
+# Set XYMONAPI_PASSWD to the empty string for an API open to anyone who
+# reaches it where the pages are protected.
+_XYMONPASSWD = os.path.join(os.environ.get("XYMONHOME", "/nonexistent"), "etc", "xymonpasswd")
+XYMONAPI_PASSWD = os.environ.get("XYMONAPI_PASSWD",
+                                 _XYMONPASSWD if os.path.exists(_XYMONPASSWD) else "")
 _USER = re.compile(r"[^\s:-][^\s:]*")
 
 

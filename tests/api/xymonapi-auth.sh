@@ -80,6 +80,22 @@ env=$(curl -s -u bob:s3cret "http://127.0.0.1:$API_PORT/xymon/api/v1/client?form
 assert_contains "XYMONAPI_USER=bob" "$env" "format=env gives the settings, for the user who asked"
 assert_not_contains "git clone" "$env" "and no script"
 
+# Xymon's own password file is the default: with XYMONHOME set and
+# etc/xymonpasswd there, nothing else need be set, and the API asks for
+# what the web pages ask for. The empty string turns it off.
+stop_process "$API_PID"
+API_PID=""
+mkdir -p "$work/home/etc"; cp "$work/htpasswd" "$work/home/etc/xymonpasswd"
+unset XYMONAPI_PASSWD
+XYMONHOME="$work/home" start_api
+url="http://127.0.0.1:$API_PORT/xymon/api/v1/health"
+assert_equal "401" "$(code)" "with XYMONHOME's etc/xymonpasswd and no setting, a password is asked"
+assert_equal "200" "$(code -u alice:secret)" "the web pages' user is let in"
+stop_process "$API_PID"
+API_PID=""
+XYMONHOME="$work/home" XYMONAPI_PASSWD="" start_api
+url="http://127.0.0.1:$API_PORT/xymon/api/v1/health"
+assert_equal "200" "$(code)" "XYMONAPI_PASSWD set empty: no password asked"
 stop_process "$API_PID"
 API_PID=""
 rc=0
