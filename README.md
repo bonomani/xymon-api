@@ -170,13 +170,26 @@ at once.
 XYMON_SRC=/path/to/built/xymon tests/run.sh
 ```
 
+| test, under `tests/api/` | what it checks |
+|---|---|
+| `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file |
+| `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond` |
+| `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote |
+| `xymonapi-series` | `/series` reads an RRD; `/series` and `/graphs` refuse names that leave `XYMONRRDS` |
+| `xymonapi-graphs` | `/graphs` reaches `showgraph.sh` through `XYMONWEBHOST` when `XYMONSERVERCGIURL` is a path |
+| `xymonapi-install` | `make install` lays out the files and keeps an enabled task |
+| `xymonapi-mcp` | the MCP server's tools answer with the API's board and are read-only |
+| `xymonapi-rag` | the search finds the right manual page and history passage; `ask` reaches a language model |
+| `xymonapi-rag-startup` | `index` waits for an API that is not up yet, and not for one that refuses it |
+
 They need `bash`, `curl`, and the Python modules of all three
 `requirements.txt` -- the API's, `mcp-server/`'s and `rag/`'s -- for `python3`,
 or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool` or Apache's
 `htpasswd`. The web server and the language model are stand-ins under
-`tests/lib/`; the embedding model is the real one. The search test downloads the embedding model, about 65 MB, the
-first time. A test skips (exit 77) when something it needs is missing, and says
-what. CI builds Xymon's `main` and runs them with nothing missing:
+`tests/lib/`; the embedding model is the real one, downloaded once, about
+65 MB. A test skips (exit 77) when something it needs is missing, and says
+what. The whole run takes two to three minutes, most of it the two search
+tests. CI builds Xymon's `main` and runs them with nothing missing:
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
 ## Licence
