@@ -8,12 +8,15 @@ Listens on a free port on 127.0.0.1 and writes it to PORTFILE. Every request
 is written to RECORD -- its Authorization header, then its body. A POST to
 /v1/chat/completions is answered with the fixed text FAKE ANSWER, unless it
 names the model no-such-model, which is answered 404 as Ollama answers for a
-model it has not pulled. With REDIRECT, a URL, every request is answered 302
-to it instead.
+model it has not pulled; thinking-model, answered with an empty content and
+reasoning only, as LM Studio answers for a reasoning model out of tokens; or
+slow-model, answered after three seconds. With REDIRECT, a URL, every request
+is answered 302 to it instead.
 """
 import http.server
 import json
 import sys
+import time
 
 portfile, record = sys.argv[1], sys.argv[2]
 redirect = sys.argv[3] if len(sys.argv) > 3 else ""
@@ -38,8 +41,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 or b'"model":"no-such-model"' in body:
             self.send_error(404)
             return
-        answer = json.dumps({"choices": [{"message": {"role": "assistant",
-                                                      "content": "FAKE ANSWER"}}]}).encode()
+        if b'"model": "slow-model"' in body:
+            time.sleep(3)
+        content = "" if b'"model": "thinking-model"' in body else "FAKE ANSWER"
+        answer = json.dumps({"choices": [{"message": {"role": "assistant", "content": content,
+                                                      "reasoning_content": "Let me think..."},
+                                          "finish_reason": "length" if not content else "stop"}]}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(answer)))

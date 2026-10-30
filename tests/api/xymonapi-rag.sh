@@ -135,6 +135,20 @@ XYMONAPI_RAG_LLM_MODEL=no-such-model rag ask 'a full disk' > /dev/null || rc=$?
 [ "$rc" -ne 0 ] || fail "ask with a model the server has not got succeeded"
 assert_contains 'answered 404: it has no model named no-such-model' "$(cat "$work/rag.err")" "a 404 from the model server names the model"
 assert_contains 'ollama pull no-such-model' "$(cat "$work/rag.err")" "and says how to pull it"
+assert_contains '"max_tokens": 2048' "$(cat "$work/llm.req")" "the model is given a token budget"
+
+# A reasoning model that used its budget on thinking: no answer, only
+# reasoning_content. And a model that does not answer in time: a message,
+# not a traceback.
+rc=0
+XYMONAPI_RAG_LLM_MODEL=thinking-model rag ask 'a full disk' > /dev/null || rc=$?
+[ "$rc" -ne 0 ] || fail "ask with an empty answer succeeded"
+assert_contains 'thinking-model gave no answer, only reasoning' "$(cat "$work/rag.err")" "an empty answer is explained"
+rc=0
+XYMONAPI_RAG_LLM_MODEL=slow-model XYMONAPI_RAG_LLM_TIMEOUT=1 rag ask 'a full disk' > /dev/null || rc=$?
+[ "$rc" -ne 0 ] || fail "ask with a model slower than the timeout succeeded"
+assert_contains 'gave no answer in 1 seconds (XYMONAPI_RAG_LLM_TIMEOUT)' "$(cat "$work/rag.err")" "a timeout is a message"
+assert_not_contains 'Traceback' "$(cat "$work/rag.err")" "and not a traceback"
 
 # A model that redirects: the bearer key must not follow to the host named.
 # TARGET records whatever reaches it; REDIRECT answers 302 to TARGET.

@@ -40,6 +40,8 @@ OFFLINE = os.environ.get("XYMONAPI_RAG_OFFLINE", "") not in ("", "0", "no")
 LLM_URL = os.environ.get("XYMONAPI_RAG_LLM_URL", "http://127.0.0.1:11434/v1").rstrip("/")
 LLM_MODEL = os.environ.get("XYMONAPI_RAG_LLM_MODEL", "llama3.1")
 LLM_KEY = os.environ.get("XYMONAPI_RAG_LLM_KEY", "")
+LLM_TIMEOUT = float(os.environ.get("XYMONAPI_RAG_LLM_TIMEOUT", "300"))
+LLM_MAX_TOKENS = int(os.environ.get("XYMONAPI_RAG_LLM_MAX_TOKENS", "2048"))
 PASSAGE = 1200          # characters: one manual-page item or one saved status
 LLM_MAX = 1024 * 1024   # bytes of an answer from the language model
 HISTLOG_TEXT = 2000     # characters of a saved status that are indexed
@@ -255,7 +257,7 @@ def ask(question: str, k: int = 5) -> str:
     context = "\n\n".join(
         f'[{p["kind"]}: {p["title"]}' + (f' ({p["trust"]})' if "trust" in p else "")
         + f']\n{p["text"]}' for p in found)
-    body = json.dumps({"model": LLM_MODEL, "messages": [
+    body = json.dumps({"model": LLM_MODEL, "max_tokens": LLM_MAX_TOKENS, "messages": [
         {"role": "system", "content":
          "You answer questions about a Xymon monitoring server, from the passages "
          "of its manual pages and its history given with the question. Say so when "
@@ -273,12 +275,23 @@ def ask(question: str, k: int = 5) -> str:
     if LLM_KEY:
         req.add_header("Authorization", f"Bearer {LLM_KEY}")
     try:
-        with client._opener.open(req, timeout=300) as r:
+        with client._opener.open(req, timeout=LLM_TIMEOUT) as r:
             answer = r.read(LLM_MAX + 1)
         if len(answer) > LLM_MAX:
             raise SystemExit(f"xymonapi-rag: the language model at {LLM_URL} answered "
                              f"more than {LLM_MAX} bytes")
-        return json.loads(answer)["choices"][0]["message"]["content"]
+        choice = json.loads(answer)["choices"][0]
+        text = choice["message"]["content"]
+        if not text:
+            # A reasoning model that spent every token thinking: LM Studio
+            # returns its thoughts as reasoning_content and an empty content.
+            raise SystemExit(f"xymonapi-rag: {LLM_MODEL} gave no answer, only reasoning, in "
+                             f"{LLM_MAX_TOKENS} tokens (XYMONAPI_RAG_LLM_MAX_TOKENS); use a model "
+                             f"that does not think, or let it have more tokens")
+        return text
+    except TimeoutError as e:
+        raise SystemExit(f"xymonapi-rag: the language model at {LLM_URL} gave no answer in "
+                         f"{LLM_TIMEOUT:g} seconds (XYMONAPI_RAG_LLM_TIMEOUT)") from e
     except urllib.error.HTTPError as e:
         why = ""
         if e.code in (301, 302, 303, 307, 308):

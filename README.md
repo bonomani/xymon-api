@@ -98,7 +98,8 @@ manual page named.
 | `XYMONAPI_RAG_MAX_HISTORY` | how many changes at most, the newest first | `5000` |
 | `XYMONAPI_RAG_MODEL` | the embedding model | `BAAI/bge-small-en-v1.5` |
 | `XYMONAPI_RAG_OFFLINE` | set, the model is never downloaded, only read from the cache | unset |
-| `XYMONAPI_RAG_LLM_URL`, `_MODEL`, `_KEY` | the language model `ask` uses | a local Ollama, `llama3.1`, no key |
+| `XYMONAPI_RAG_LLM_URL`, `_MODEL`, `_KEY` | the language model `ask` uses: any OpenAI-compatible server, Ollama or LM Studio | a local Ollama, `llama3.1`, no key |
+| `XYMONAPI_RAG_LLM_MAX_TOKENS`, `_TIMEOUT` | the model's token budget, and how long `ask` waits | `2048`, `300` seconds |
 
 The first three are `xymonapi.8`'s; the next three `xymonapi-mcp.1`'s; the
 rest `xymonapi-rag.1`'s.
