@@ -9,8 +9,12 @@ It is an add-on. It installs into an existing Xymon server, runs as one of its
 `xymonlaunch` tasks, and uses Xymon's own settings from `xymonserver.cfg`.
 Xymon itself is unchanged and needs none of it.
 
-The manual page, [`xymonapi.8`](xymonapi.8), is the specification: every
-operation, every setting, and how to enable it. The OpenAPI description is
+Its operations, all GET under `/xymon/api/v1`: `/health`, `/states`,
+`/alarms`, `/entities`, `/series` (the values of one RRD dataset), `/graphs`
+(the PNG showgraph draws), `/events` (the colour changes, newest first, a
+page at a time) and `/histlog` (the status text saved at one). The manual
+page, [`xymonapi.8`](xymonapi.8), is the specification: every operation,
+every setting, and how to enable it. The OpenAPI description is
 [`openapi.yaml`](openapi.yaml), also served by the API at `/openapi.json`.
 
 ## Requirements
@@ -72,6 +76,32 @@ the manual page:
 curl http://127.0.0.1:1986/xymon/api/v1/health
 ```
 
+## Settings
+
+All of them are environment variables. The API's go in a file under
+`xymonserver.d/`; the client's and the search's go there too for the index
+task, and in the MCP registration for Claude. Every one is described in the
+manual page named.
+
+| setting | meaning | default |
+|---|---|---|
+| `XYMONAPI_LISTEN` | where the API listens, HOST:PORT | `127.0.0.1:1986` |
+| `XYMONAPI_PASSWD` | an htpasswd file; set, every request needs a user from it | none: no password |
+| `XYMONAPI_PYTHON` | the Python 3.10+ to run with | `python3` on PATH |
+| `XYMONAPI_URL` | where the API is, for the MCP server and the search | `http://127.0.0.1:1986` |
+| `XYMONAPI_USER`, `XYMONAPI_PASSWORD` | the user and password they send | none |
+| `XYMONAPI_PASSWORD_FILE` | the password from the first line of this file instead | none |
+| `XYMONAPI_RAG_DOCS` | a directory of manual pages to index | none |
+| `XYMONAPI_RAG_INDEX` | the index file | `~/.cache/xymonapi-rag/index.npz` |
+| `XYMONAPI_RAG_SINCE` | how far back the history is indexed | `-30d` |
+| `XYMONAPI_RAG_MAX_HISTORY` | how many changes at most, the newest first | `5000` |
+| `XYMONAPI_RAG_MODEL` | the embedding model | `BAAI/bge-small-en-v1.5` |
+| `XYMONAPI_RAG_OFFLINE` | set, the model is never downloaded, only read from the cache | unset |
+| `XYMONAPI_RAG_LLM_URL`, `_MODEL`, `_KEY` | the language model `ask` uses | a local Ollama, `llama3.1`, no key |
+
+The first three are `xymonapi.8`'s; the next three `xymonapi-mcp.1`'s; the
+rest `xymonapi-rag.1`'s.
+
 ## Pitfalls seen in practice
 
 From an install on a Homebrew Xymon (`xymon-server-preview`) on macOS, with
@@ -132,14 +162,15 @@ once, at user scope so every project has it:
 ```sh
 claude mcp add --scope user xymon \
   -e XYMONAPI_URL=http://127.0.0.1:1986 \
-  -e XYMONAPI_USER=me -e XYMONAPI_PASSWORD=... \
+  -e XYMONAPI_USER=me -e XYMONAPI_PASSWORD_FILE=/path/to/password \
   -e XYMONAPI_PYTHON=/path/to/python3.12 \
   -e XYMONAPI_RAG_DOCS=/usr/share/man \
   -- /path/to/xymon-api/mcp-server/xymonapi-mcp.sh
 ```
 
-Leave out the user and password when the API asks for none, and
-`XYMONAPI_PYTHON` when the system `python3` has the modules. The two searches
+Leave out the user and password when the API asks for none -- or pass the
+password itself in `XYMONAPI_PASSWORD`, which then sits in Claude's settings
+file -- and `XYMONAPI_PYTHON` when the system `python3` has the modules. The two searches
 answer a tool error until the index below is built.
 
 For an API on another machine, use HTTPS through a web server in front of
@@ -185,10 +216,10 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file |
+| `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file; the MCP client with `XYMONAPI_PASSWORD_FILE` |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond` |
-| `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote |
-| `xymonapi-series` | `/series` reads an RRD; `/series` and `/graphs` refuse names that leave `XYMONRRDS` |
+| `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
+| `xymonapi-series` | `/series` reads an RRD, an HTTP test's too, answers 404 and 400 as documented, and refuses names that leave `XYMONRRDS` |
 | `xymonapi-graphs` | `/graphs` reaches `showgraph.sh` through `XYMONWEBHOST` when `XYMONSERVERCGIURL` is a path |
 | `xymonapi-install` | `make install` lays out the files and keeps an enabled task |
 | `xymonapi-mcp` | the MCP server's tools answer with the API's board and are read-only |
