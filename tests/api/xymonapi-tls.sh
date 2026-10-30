@@ -6,7 +6,9 @@
 # With a certificate and key -- xymond's own, $XYMONHOME/etc/tls/xymond.pem
 # and .key as xymon-tls(7) places them, or the files XYMONAPI_TLS_CERT and
 # XYMONAPI_TLS_KEY name -- the API speaks HTTPS on its port, and plain HTTP
-# gets no answer. /client then writes an https:// address. A key that others
+# gets no answer. /client then writes an https:// address, and its script
+# says where to put a certificate it does not trust before asking for a
+# password. A key that others
 # can read, or a certificate without its key, stops the API from starting.
 # The MCP client trusts the certificate XYMONAPI_CA names, and says what to
 # do when it is given none for a certificate the system does not trust.
@@ -44,6 +46,26 @@ assert_contains '"alive"' "$(api_get /health)" "the API answers over HTTPS with 
 assert_equal "000" "$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT/xymon/api/v1/health" || true)" "and not over plain HTTP"
 assert_contains "URL=https://127.0.0.1:$API_PORT" "$(api_get /client)" "/client writes an https:// address"
 assert_contains "CAFILE=" "$(api_get /client)" "and knows where a certificate to trust would go"
+
+# The setup script, for a user, with no certificate to trust: it says what
+# to do -- copy the certificate to CAFILE -- before asking for a password,
+# which would go nowhere. git and make are stubs, and the virtualenv is
+# there, so nothing is fetched or built; the user is written in, since
+# this API asks for none.
+lap=$work/lap
+mkdir -p "$work/stub" "$lap/src/.git" "$lap/prefix/libexec/xymonapi/venv/bin" "$lap/cfg"
+printf '#!/bin/sh\nexit 0\n' > "$work/stub/git"
+cp "$work/stub/git" "$work/stub/make"
+cp "$work/stub/git" "$lap/prefix/libexec/xymonapi/venv/bin/python3"
+chmod 755 "$work/stub/git" "$work/stub/make" "$lap/prefix/libexec/xymonapi/venv/bin/python3"
+api_get /client | sed "s/^USER=''$/USER=carol/" > "$work/setup.sh"
+grep -q '^USER=carol$' "$work/setup.sh" || fail "no USER= line to fill in /client's script"
+rc=0
+out=$(cd "$lap" && printf 'secret\n' | HOME="$lap" XDG_CONFIG_HOME="$lap/cfg" XYMONAPI_SRC="$lap/src" PATH="$work/stub:$PATH" \
+	sh "$work/setup.sh" "$lap/prefix" 2>&1) || rc=$?
+[ "$rc" -ne 0 ] || fail "the setup script went on with a certificate it does not trust: $out"
+assert_contains "copy the server's certificate" "$out" "the setup script says what to do with an unknown certificate"
+assert_not_contains "your password" "$out" "before it asks for a password"
 
 # The MCP client: refused without the CA, let in with it.
 mcp "https://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true

@@ -148,6 +148,10 @@ health() {{
 	rm -f "$HOME/.xymon-setup.err"
 }}
 
+# The API reached, its certificate trusted, before a password is asked: a
+# certificate this machine does not know is said here, with what to do.
+health "$@" >/dev/null
+
 if [ -n "$USER" ]; then
 	# A token from an earlier run is kept while it works; a revoked or
 	# replaced one is replaced.
