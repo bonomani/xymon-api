@@ -33,10 +33,11 @@ register_cleanup 'stop_process "$API_PID"'
 
 # host test time prevtime prevduration newcolour oldcolour trend
 mkdir -p "$work/hist" "$work/histlogs/web_example_com/http" "$work/empty"
+# As xymond_history writes it: the colours as their first two letters.
 cat > "$work/hist/allevents" <<'EOF'
-web.example.com http 1699400000 1699300000 100000 red green 0
-db.example.com conn 1699400300 1699000000 400000 yellow green 0
-web.example.com http 1699400600 1699400000 600 green red 0
+web.example.com http 1699400000 1699300000 100000 re gr 0
+db.example.com conn 1699400300 1699000000 400000 ye gr 0
+web.example.com http 1699400600 1699400000 600 gr re 0
 EOF
 printf 'red Tue Nov  7 23:33:20 2023 HTTP 500 from /login\n' \
 	> "$work/histlogs/web_example_com/http/Tue_Nov_7_23:33:20_2023"
@@ -94,8 +95,8 @@ size=$(wc -c < "$work/big.json" | tr -d ' ')
 # written without a newline, is read like the others.
 stop_process "$API_PID"; API_PID=""
 mkdir -p "$work/long"
-awk 'BEGIN { for (i = 1; i <= 2500; i++) printf "h%d.example.com conn %d %d 60 red green 0\n", i % 7, 1700000000 + i * 10, 1700000000 + i * 10 - 60 }' > "$work/long/allevents"
-printf 'last.example.com conn 1700030000 1700029940 60 red green 0' >> "$work/long/allevents"
+awk 'BEGIN { for (i = 1; i <= 2500; i++) printf "h%d.example.com conn %d %d 60 re gr 0\n", i % 7, 1700000000 + i * 10, 1700000000 + i * 10 - 60 }' > "$work/long/allevents"
+printf 'last.example.com conn 1700030000 1700029940 60 re gr 0' >> "$work/long/allevents"
 XYMONHISTDIR="$work/long" start_api
 page=$(api_get '/events?limit=1000')
 assert_equal "1000" "$(printf '%s' "$page" | grep -o '"epoch":' | wc -l | tr -d ' ')" "limit=1000 gives a thousand"

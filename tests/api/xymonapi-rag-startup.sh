@@ -28,7 +28,7 @@ register_cleanup 'stop_process "$API_PID"'
 
 mkdir -p "$work/docs" "$work/hist" "$work/histlogs/web_example_com/http"
 cp "$XYMON_SRC/common/hosts.cfg.5" "$work/docs/" || fail "no common/hosts.cfg.5 in XYMON_SRC"
-printf 'web.example.com http 1699400000 1699300000 100000 red green 0\n' > "$work/hist/allevents"
+printf 'web.example.com http 1699400000 1699300000 100000 re gr 0\n' > "$work/hist/allevents"
 printf 'red Tue Nov  7 23:33:20 2023 HTTP 500 from https://web.example.com/login\n' \
 	> "$work/histlogs/web_example_com/http/Tue_Nov_7_23:33:20_2023"
 

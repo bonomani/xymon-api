@@ -66,6 +66,13 @@ class Upstream(RuntimeError):
 COLOUR_STATUS = {"green": "ok", "yellow": "warning", "red": "critical",
                  "blue": "disabled", "clear": "nodata", "purple": "unknown"}
 COLOUR_SEVERITY = {"red": "major", "purple": "critical", "yellow": "minor"}
+# xymond_history writes a colour to allevents as its first two letters:
+# "gr ye" is green after yellow. The full names are taken too.
+_SHORT = {c[:2]: c for c in COLOUR_STATUS}
+
+
+def _verdict(colour: str) -> str:
+    return COLOUR_STATUS.get(_SHORT.get(colour, colour), "unknown")
 
 
 def query(request: str) -> str:
@@ -304,8 +311,8 @@ def events(entity: str | None, test: str | None, since: str | None,
         if len(found) == n:
             break
     return [{"entity": f[0], "test": f[1], "time": _iso(f[2]), "epoch": int(f[2]),
-             "verdict": COLOUR_STATUS.get(f[5], "unknown"),
-             "previous": COLOUR_STATUS.get(f[6], "unknown"),
+             "verdict": _verdict(f[5]),
+             "previous": _verdict(f[6]),
              "previous_duration": int(f[4]) if _DIGITS.fullmatch(f[4]) else None}
             for f in found]
 

@@ -44,8 +44,8 @@ printf '.TH ZEBRA 1 "2026" "GNU"\n.SH DESCRIPTION\nzebra stripes the zebra cross
 # .TP with the item on a macro line, as Xymon's own pages write it.
 printf '.TH FROB 8 "2026" "Xymon"\n.SH OPTIONS\n.TP\n.B "--frobnicate"\nmakes every frob blink twice\n' > "$work/docs/frob.8"
 cat > "$work/hist/allevents" <<'EOF'
-web.example.com http 1699400000 1699300000 100000 red green 0
-db.example.com conn 1699400300 1699000000 400000 yellow green 0
+web.example.com http 1699400000 1699300000 100000 re gr 0
+db.example.com conn 1699400300 1699000000 400000 ye gr 0
 EOF
 printf 'red Tue Nov  7 23:33:20 2023 HTTP 500 Internal Server Error from https://web.example.com/login\n' \
 	> "$work/histlogs/web_example_com/http/Tue_Nov_7_23:33:20_2023"
@@ -156,7 +156,7 @@ assert_contains 'must be an http' "$(cat "$work/rag.err")" "a file:// model URL 
 # above and appended after them as xymond_history would, read in two pages,
 # so the oldest change of all is in the index too -- unless
 # XYMONAPI_RAG_MAX_HISTORY caps them, which keeps the newest.
-awk 'BEGIN { for (i = 1; i <= 1100; i++) printf "many%d.example.com conn %d %d 60 red green 0\n", i, 1699500000 + i * 10, 1699500000 + i * 10 - 60 }' >> "$work/hist/allevents"
+awk 'BEGIN { for (i = 1; i <= 1100; i++) printf "many%d.example.com conn %d %d 60 re gr 0\n", i, 1699500000 + i * 10, 1699500000 + i * 10 - 60 }' >> "$work/hist/allevents"
 XYMONAPI_RAG_INDEX="$work/index3.npz" rag index > "$work/index3.out" || fail "indexing 1102 changes failed: $(tail -n 5 "$work/rag.err")"
 assert_contains 'web.example.com http' "$(XYMONAPI_RAG_INDEX="$work/index3.npz" rag search -k 1 --kind history 'HTTP 500 error on the login page')" "the oldest of 1102 changes is indexed: /events was read page by page"
 XYMONAPI_RAG_INDEX="$work/index4.npz" XYMONAPI_RAG_MAX_HISTORY=50 rag index > /dev/null || fail "indexing with a cap failed: $(tail -n 5 "$work/rag.err")"
