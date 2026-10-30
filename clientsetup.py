@@ -30,8 +30,9 @@ SCRIPT = """#!/bin/sh
 # written by that API on {date} for the user {user_or_none}.
 # The address is {url_from}.
 # Read it, then run it. It installs under PREFIX (~/.local by default),
-# asks for your password once, checks the API answers, and registers the
-# MCP server with Claude Code under the name {name} when claude is here.
+# asks for your password once to get this machine a token of its own --
+# the password is not kept -- checks the API answers, and registers the MCP
+# server with Claude Code under the name {name} when claude is here.
 #
 #   sh {script} [PREFIX]
 #
@@ -42,7 +43,15 @@ NAME={name_q}
 REF={ref_q}
 PREFIX=${{1:-${{PREFIX:-$HOME/.local}}}}
 SRC=${{XYMONAPI_SRC:-$HOME/src/xymon-api}}
-PASSFILE=${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/$NAME.password
+TOKENFILE=${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/$NAME.token
+# A password an earlier version of this script kept: removed, the token
+# replaces it.
+OLDPASS=${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/$NAME.password
+# This machine's name, for its token: the short hostname, in the characters
+# a token's name may hold. It names the machine; it proves nothing.
+CLIENT=$(hostname 2>/dev/null || uname -n)
+CLIENT=$(printf '%s' "${{CLIENT%%.*}}" | tr -c 'A-Za-z0-9_.-' '-' | sed -e 's/^[^A-Za-z0-9]*//' | cut -c1-64)
+[ -n "$CLIENT" ] || CLIENT=client
 # The server's certificate, or the CA that signed it, when it is not one
 # this machine trusts already -- xymond's own, as xymon-tls(7) sets it up.
 # Copy it here first, and it is used for the check below and registered.
@@ -86,58 +95,87 @@ if [ ! -x "$VENV/bin/python3" ]; then
 	"$VENV/bin/pip" -q install -r "$SRC/mcp-server/requirements.txt"
 fi
 
-if [ -n "$USER" ]; then
-	if [ ! -s "$PASSFILE" ]; then
-		say "your password for $USER at $URL, kept in $PASSFILE (mode 600)"
-		mkdir -p "$(dirname "$PASSFILE")"
-		printf 'password: '
-		# Echo comes back however the read ends, Ctrl-C included.
-		stty -echo 2>/dev/null && trap 'stty echo 2>/dev/null' EXIT INT TERM
-		read -r pw
-		stty echo 2>/dev/null || true
-		trap - EXIT INT TERM
-		printf '\\n'
-		( umask 077 && printf '%s\\n' "$pw" > "$PASSFILE" )
-	fi
-	# The user and password go to curl in a config on its stdin, not on its
-	# command line, which ps shows to everyone; the first line of the file is
-	# the password, as the MCP client reads it, with curl's two escapes.
-	pw=$(head -n 1 "$PASSFILE" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g')
-	curlcfg="user = \\"$USER:$pw\\""
-else
-	curlcfg=""
-fi
-
 # The options that depend on what is here are built as the positional
 # parameters: sh has no arrays, and a path with a space stays one word.
 ca=""
 set --
 [ -s "$CAFILE" ] && ca=1 && set -- --cacert "$CAFILE"
 
-say "does the API answer?"
-health=$(printf '%s\\n' "$curlcfg" | curl -sS -K - --max-time 15 "$@" "$URL/xymon/api/v1/health" 2>"$HOME/.xymon-setup.err") || {{
-	grep -qi 'certificate' "$HOME/.xymon-setup.err" && die "$URL has a certificate this machine does not trust: copy the server's certificate, or the CA that signed it, to $CAFILE and run this again"
-	die "no answer from $URL: $(cat "$HOME/.xymon-setup.err")"
+# curl's config escapes: a backslash and a double quote, inside "...".
+esc() {{ printf '%s' "$1" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g'; }}
+
+# A token for this machine, asked for with the password, which goes to curl
+# in a config on its stdin -- not on its command line, which ps shows to
+# everyone -- and is kept nowhere.
+new_token() {{
+	say "a token for $CLIENT, for $USER at $URL: your password, once"
+	printf 'password: '
+	# Echo comes back however the read ends, Ctrl-C included.
+	stty -echo 2>/dev/null && trap 'stty echo 2>/dev/null' EXIT INT TERM
+	read -r pw
+	stty echo 2>/dev/null || true
+	trap - EXIT INT TERM
+	printf '\\n'
+	answer=$(printf 'user = "%s:%s"\\n' "$(esc "$USER")" "$(esc "$pw")" |
+		curl -sS -K - --max-time 15 "$@" -X POST -H 'Content-Type: application/json' \\
+			-d "{{\\"client\\":\\"$CLIENT\\"}}" "$URL/xymon/api/v1/tokens") ||
+		die "no answer from $URL for a token: $answer"
+	pw=""
+	token=$(printf '%s' "$answer" | sed -n 's/.*"token": *"\\(xat_[A-Za-z0-9_-]*\\)".*/\\1/p')
+	case $answer in *unauthorized*) die "the API refused the password for $USER" ;; esac
+	[ -n "$token" ] || die "the API gave no token: $answer"
+	mkdir -p "$(dirname "$TOKENFILE")"
+	( umask 077 && printf '%s\\n' "$token" > "$TOKENFILE" )
+	echo "kept in $TOKENFILE (mode 600); the API's /tokens lists and revokes it"
 }}
-rm -f "$HOME/.xymon-setup.err"
-case $health in
-	*'"alive":true'*) echo "yes: $health" ;;
-	*'"alive":false'*) echo "the API answers, but its xymond does not: $health" ;;
-	*unauthorized*) die "the API refused the password in $PASSFILE: remove that file and run this again" ;;
-	*) die "an unexpected answer from $URL: $health" ;;
+
+# health -- what /health answers with this machine's token, or with none.
+health() {{
+	if [ -s "$TOKENFILE" ]; then
+		printf 'header = "Authorization: Bearer %s"\\n' "$(head -n 1 "$TOKENFILE")"
+	else
+		printf '\\n'
+	fi | curl -sS -K - --max-time 15 "$@" "$URL/xymon/api/v1/health" 2>"$HOME/.xymon-setup.err" || {{
+		grep -qi 'certificate' "$HOME/.xymon-setup.err" && die "$URL has a certificate this machine does not trust: copy the server's certificate, or the CA that signed it, to $CAFILE and run this again"
+		die "no answer from $URL: $(cat "$HOME/.xymon-setup.err")"
+	}}
+	rm -f "$HOME/.xymon-setup.err"
+}}
+
+if [ -n "$USER" ]; then
+	# A token from an earlier run is kept while it works; a revoked or
+	# replaced one is replaced.
+	if [ -s "$TOKENFILE" ]; then
+		case $(health "$@") in *unauthorized*) new_token "$@" ;; esac
+	else
+		new_token "$@"
+	fi
+	if [ -e "$OLDPASS" ]; then
+		rm -f "$OLDPASS"
+		echo "removed $OLDPASS: the token replaces the password, which is no longer kept"
+	fi
+fi
+
+say "does the API answer?"
+answer=$(health "$@")
+case $answer in
+	*'"alive":true'*) echo "yes: $answer" ;;
+	*'"alive":false'*) echo "the API answers, but its xymond does not: $answer" ;;
+	*unauthorized*) die "the API refused the token in $TOKENFILE: remove it and run this again" ;;
+	*) die "an unexpected answer from $URL: $answer" ;;
 esac
 
 if command -v claude >/dev/null 2>&1; then
 	say "registering the MCP server with Claude Code as $NAME"
 	claude mcp remove --scope user "$NAME" >/dev/null 2>&1 || true
 	set -- --scope user "$NAME" -e XYMONAPI_URL="$URL"
-	[ -n "$USER" ] && set -- "$@" -e XYMONAPI_USER="$USER" -e XYMONAPI_PASSWORD_FILE="$PASSFILE"
+	[ -n "$USER" ] && set -- "$@" -e XYMONAPI_TOKEN_FILE="$TOKENFILE"
 	[ -n "$ca" ] && set -- "$@" -e XYMONAPI_CA="$CAFILE"
 	claude mcp add "$@" -e XYMONAPI_PYTHON="$VENV/bin/python3" -- "$PREFIX/bin/xymonapi-mcp"
 else
 	say "Claude Code is not here; to register the MCP server later:"
 	echo "  claude mcp add --scope user $NAME -e XYMONAPI_URL=$URL \\\\"
-	[ -n "$USER" ] && echo "    -e XYMONAPI_USER=$USER -e XYMONAPI_PASSWORD_FILE=$PASSFILE \\\\"
+	[ -n "$USER" ] && echo "    -e XYMONAPI_TOKEN_FILE=$TOKENFILE \\\\"
 	[ -n "$ca" ] && echo "    -e XYMONAPI_CA=$CAFILE \\\\"
 	echo "    -e XYMONAPI_PYTHON=$VENV/bin/python3 -- $PREFIX/bin/xymonapi-mcp"
 fi
@@ -145,19 +183,19 @@ fi
 say "done"
 cat <<EOF
 From a shell, with these in the environment:
-  export XYMONAPI_URL=$URL${{USER:+ XYMONAPI_USER=$USER XYMONAPI_PASSWORD_FILE=$PASSFILE}}${{ca:+ XYMONAPI_CA=$CAFILE}}
+  export XYMONAPI_URL=$URL${{USER:+ XYMONAPI_TOKEN_FILE=$TOKENFILE}}${{ca:+ XYMONAPI_CA=$CAFILE}}
   $PREFIX/bin/xymonapi-rag search "what does purple mean"
 In Claude Code, just ask: "which hosts are red?"
 EOF
 """
 
 ENV = """# The Xymon API at {url}, for the user {user_or_none}: written by that API on {date}.
-# Three settings, as a shell reads them: source this file, or paste the
-# lines after export. Elsewhere, write the password file's path out in full.
+# Two settings, as a shell reads them: source this file, or paste the lines
+# after export. The token file is the setup script's, the same path; without
+# the script, POST {{"client": NAME}} to /xymon/api/v1/tokens with your
+# password, and write the token it answers there, mode 600.
 XYMONAPI_URL={url_q}
-XYMONAPI_USER={user_q}
-# The first line of this file is the password; create it with mode 600.
-XYMONAPI_PASSWORD_FILE={passfile_q}
+XYMONAPI_TOKEN_FILE={tokenfile}
 """
 
 
@@ -196,9 +234,9 @@ def installed_commit() -> str:
 
 
 def render(url: str, user: str, name: str, fmt: str) -> str:
-    # $HOME, not ${XDG_CONFIG_HOME:-...}: the same place the script's default
-    # is, written as the one expression every shell expands.
-    passfile = f"$HOME/.config/xymon-api/{name}.password"
+    # The script's own expression for the place, which a shell sourcing the
+    # env format expands the same way.
+    tokenfile = f"${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/{name}.token"
     ref = installed_commit()
     # Where the address came from, said in the script: a Host header is the
     # requester's word, and XYMONAPI_PUBLIC_URL is the fix when it is wrong.
@@ -210,6 +248,6 @@ def render(url: str, user: str, name: str, fmt: str) -> str:
                  ref=ref, ref_q=shlex.quote(ref),
                  user_or_none=user or "(none: the API asks for no password)",
                  name=name, name_q=shlex.quote(name), repo=REPO, repo_q=shlex.quote(REPO),
-                 passfile_q=passfile, script=f"{name}-setup.sh",
+                 tokenfile=tokenfile, script=f"{name}-setup.sh",
                  date=time.strftime("%Y-%m-%d", time.gmtime()))
     return (ENV if fmt == "env" else SCRIPT).format(**vars_)

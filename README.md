@@ -114,11 +114,14 @@ reach, so that the script carries the address you mean and not the one a
 request happened to use.
 It clones this repository at the commit the server was installed from, so
 both sides run the same code, runs `make install-client`, makes a virtualenv
-with the `mcp` module, asks for your password once into
-`~/.config/xymon-api/xymon.password`, checks `/health` answers, and
-registers the MCP server with Claude Code. `?name=xymon-lab` gives a second
-server its own name and password file; `?format=env` gives the three
-settings alone.
+with the `mcp` module, asks for your password once to get **this machine a
+token of its own**, named by its short hostname, keeps the token in
+`~/.config/xymon-api/xymon.token` and not the password, checks `/health`
+answers, and registers the MCP server with Claude Code. The API's `/tokens`
+lists your machines and revokes one (`xymonapi.8`, TOKENS); running the
+script again keeps a token that still works and replaces one that does
+not. `?name=xymon-lab` gives a second server its own name and token file;
+`?format=env` gives the two settings alone.
 
 By hand, `make install-client` from a clone puts `xymonapi-mcp` and
 `xymonapi-rag` in `$PREFIX/bin` (`~/.local` by default) and the code under
@@ -140,9 +143,11 @@ manual page named.
 | `XYMONAPI_PASSWD` | an htpasswd file; every request needs a user from it; empty for none | Xymon's `etc/xymonpasswd` when it exists |
 | `XYMONAPI_TLS_CERT`, `_KEY` | a certificate and key; with them the API speaks HTTPS | xymond's `etc/tls/xymond.pem` and `.key` when they exist |
 | `XYMONAPI_PUBLIC_URL` | the address `/client` writes; set it on a server other machines reach | the address the request came through |
+| `XYMONAPI_TOKENS` | the file of client tokens' SHA-256s | `$XYMONVAR/xymonapi/tokens` |
 | `XYMONAPI_HIDE` | a file of regular expressions; what they match is `[hidden]` in every text returned | none |
 | `XYMONAPI_PYTHON` | the Python 3.10+ to run with | `python3` on PATH |
 | `XYMONAPI_URL` | where the API is, for the MCP server and the search | `http://127.0.0.1:1986` |
+| `XYMONAPI_TOKEN_FILE`, `XYMONAPI_TOKEN` | this machine's client token, from the first line of this file, or itself; sent before a user and password | none |
 | `XYMONAPI_USER`, `XYMONAPI_PASSWORD` | the user and password they send | none |
 | `XYMONAPI_PASSWORD_FILE` | the password from the first line of this file instead | none |
 | `XYMONAPI_CA` | the certificate, or CA, to trust for an https:// API the system does not trust already | the system's store |
@@ -283,7 +288,8 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through, and its script gets a password with a space, a quote, a backslash and a glob character to the API as it is |
+| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through, and its script gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, and registers the MCP server with it |
+| `xymonapi-tokens` | a token per user and machine opens the API, replaces the last, is revoked on its own, cannot make, list or revoke tokens, is stored as its SHA-256 only, and lets the MCP client in |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled; `XYMONAPI_HIDE` blanks secrets, and a bad expression stops the API |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
 | `xymonapi-series` | `/series` reads an RRD, an HTTP test's too, answers 404 and 400 as documented, and refuses names that leave `XYMONRRDS` |
