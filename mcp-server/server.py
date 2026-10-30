@@ -76,9 +76,11 @@ def series(entity: str, test: str, metric: str | None = None,
            start: str = "-24h", end: str = "now") -> dict:
     """The values of one dataset of a host's RRD file over a time range.
 
-    test is the RRD file without .rrd (la, disk, tcp.http, ...), metric the
-    dataset in it (default lambda). start and end are now, seconds since the
-    epoch, or relative like -30m, -24h, -7d.
+    test is the RRD file without .rrd (la, disk, tcp.http.<host>:<port>, ...),
+    metric the dataset in it (default lambda). start and end are now, seconds
+    since the epoch, or relative like -30m, -24h, -7d. Xymon writes the
+    files every 30 minutes, so the last points may be null while the test
+    is fine: say so rather than reading a gap at the end as an outage.
     """
     return api("/series", entity=entity, test=test, metric=metric,
                **{"from": start, "to": end})

@@ -131,6 +131,13 @@ Apache on port 8080. Check each against your server:
   Also, editing a file under `tasks.d/` does not make xymonlaunch reload:
   `touch tasks.cfg` does, and a task is restarted only when its definition
   changed, comments aside.
+- **The last half hour of `/series`**: `xymond_rrd` keeps updates in memory
+  for 30 minutes before it writes them (`xymond_rrd(8)`, `--no-cache`), and
+  writes early only when a graph is shown. `/series` reads the files, so its
+  last points can be up to 30 minutes behind what Xymon knows, and null at
+  the end does not mean the test stopped. `/graphs` asks showgraph, which
+  has the cache written first, so it is current; or run `xymond_rrd` with
+  `--no-cache` in `tasks.cfg`.
 - **Homebrew**: `$XYMONHOME/ext` is inside the Cellar, so `brew upgrade`
   drops `ext/xymonapi`. Run `make install` again. The task file and settings
   under `/opt/homebrew/etc` survive.

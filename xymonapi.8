@@ -54,7 +54,10 @@ is in la.rrd and memory in memory.rrd, and a disk is in disk,<mount with
 commas for slashes>.rrd. DATASET is a column in that file: lambda is the
 load average in la.rrd, sec the response time in a tcp.*.rrd. DATASET
 defaults to lambda, and a missing file or dataset is answered 404; from
-after to is a 400. To see
+after to is a 400. The file is read as it is on disk, and xymond_rrd
+writes it every 30 minutes unless run with --no-cache (or a graph is shown,
+which has the cache written first): the newest points can be that late, and
+a null at the end is not a test that stopped. To see
 what a host has, list $XYMONRRDS/HOST/ there, or run rrdtool info on a file.
 .IP "\fB/graphs\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
 The graph
