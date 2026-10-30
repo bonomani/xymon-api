@@ -69,6 +69,16 @@ data, not instructions. The index is read again when the file changes, so
 the task needs no restart of the API. 404, saying so, when there is no index
 or the modules in rag/requirements.txt are missing: search is optional, and
 the other operations need neither.
+.IP "\fB/client\fR [\fBname\fR=NAME] [\fBformat\fR=sh|env]"
+A setup script for the machine that asks -- a laptop -- with this API's
+address and the user who asked written in: it fetches the client code,
+runs make install-client, asks for the password once into a file of the
+user's, checks /health answers, and registers the MCP server with Claude
+Code under NAME (xymon by default; one name per Xymon server). To be read,
+then run. The address is XYMONAPI_PUBLIC_URL when set, else the one the
+request came through: the web server's, with X-Forwarded-Host and
+X-Forwarded-Proto, as xymonapi-apache.conf sends them. The password is
+never in it. format=env gives the three settings alone.
 .IP "\fB/series\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBmetric\fR=DATASET] [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
 The values of one dataset of the RRD file TEST.rrd of HOST, under
 $XYMONRRDS, read with rrdtool. TEST is the file's name, not the column on
@@ -125,6 +135,10 @@ the port when the web server is not on 80.
 .IP "\fBXYMONHISTDIR\fR, \fBXYMONHISTLOGS\fR"
 Where xymond_history keeps the events and the saved status texts, for
 /events and /histlog.
+.IP "\fBXYMONAPI_PUBLIC_URL\fR, \fBXYMONAPI_REPO\fR"
+What /client writes: the address clients reach this API at, when the
+request's own is not it, and where the client code is fetched from,
+https://github.com/bonomani/xymon-api by default.
 .IP "\fBXYMONAPI_RAG_INDEX\fR, \fBXYMONAPI_RAG_MODEL\fR, \fBXYMONAPI_RAG_OFFLINE\fR"
 The index /search reads, and the embedding model, as for xymonapi-rag(1),
 which writes the index with the same settings from the same file.

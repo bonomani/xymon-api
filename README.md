@@ -13,8 +13,9 @@ Its operations, all GET under `/xymon/api/v1`: `/health`, `/states`,
 `/alarms`, `/entities`, `/status` (one test's current status, text and
 acknowledgement included), `/series` (the values of one RRD dataset), `/graphs`
 (the PNG showgraph draws), `/events` (the colour changes, newest first, a
-page at a time), `/histlog` (the status text saved at one) and `/search`
-(the manual-page and history passages nearest a question, by meaning). The
+page at a time), `/histlog` (the status text saved at one), `/search`
+(the manual-page and history passages nearest a question, by meaning) and
+`/client` (a setup script for a laptop, this API's address filled in). The
 manual page, [`xymonapi.8`](xymonapi.8), is the specification: every
 operation, every setting, and how to enable it. The OpenAPI description is
 [`openapi.yaml`](openapi.yaml), also served by the API at `/openapi.json`.
@@ -85,18 +86,26 @@ curl http://127.0.0.1:1986/xymon/api/v1/health
 
 ### On a laptop
 
-Nothing of the above. Clone this repository and run, with a `PREFIX` of
-yours (`~/.local` by default):
+Nothing of the above. Ask the API for its setup script, read it, run it:
 
 ```sh
-make install-client
+curl -u me https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
+sh xymon-setup.sh
 ```
 
-It puts `xymonapi-mcp` and `xymonapi-rag` in `$PREFIX/bin`, the code under
-`$PREFIX/libexec/xymonapi`, the two manual pages under `$PREFIX/share/man`.
-The MCP server needs the module in [`mcp-server/requirements.txt`](mcp-server/requirements.txt);
-`xymonapi-rag search` and `ask` need nothing more, since they use the
-server's index through the API. Then point them at the API, over HTTPS: see
+It carries the API's address and your user name, and never the password.
+It clones this repository, runs `make install-client`, makes a virtualenv
+with the `mcp` module, asks for your password once into
+`~/.config/xymon-api/xymon.password`, checks `/health` answers, and
+registers the MCP server with Claude Code. `?name=xymon-lab` gives a second
+server its own name and password file; `?format=env` gives the three
+settings alone.
+
+By hand, `make install-client` from a clone puts `xymonapi-mcp` and
+`xymonapi-rag` in `$PREFIX/bin` (`~/.local` by default) and the code under
+`$PREFIX/libexec/xymonapi`; `xymonapi-rag search` and `ask` need no module
+beyond Python, since they use the server's index through the API. The API
+must be reachable from the laptop first: see
 [Reaching the API from elsewhere](#reaching-the-api-from-elsewhere).
 
 ## Settings
@@ -289,7 +298,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file; the MCP client with `XYMONAPI_PASSWORD_FILE` |
+| `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
 | `xymonapi-series` | `/series` reads an RRD, an HTTP test's too, answers 404 and 400 as documented, and refuses names that leave `XYMONRRDS` |

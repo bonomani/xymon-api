@@ -9,7 +9,8 @@
 # its default and what Xymon's useradm and chpasswd create, and bcrypt. Every
 # path is covered, /openapi.json and FastAPI's /docs included. A user
 # name that looks like an option is refused, not passed to htpasswd as one.
-# A password file the API cannot read stops it from starting.
+# A password file the API cannot read stops it from starting. /client
+# writes a setup script for the user who asked, at the address asked.
 #
 # Skips where the API cannot run (tests/lib/xymonapi.sh). Needs the xymon
 # client of the Xymon tree in XYMON_SRC (for a free port), Apache's htpasswd
@@ -57,6 +58,27 @@ for path in /openapi.json /docs; do
 	assert_equal "401" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT$path")" "$path without a user"
 	assert_equal "200" "$(curl -s -o /dev/null -w '%{http_code}' -u alice:secret "http://127.0.0.1:$API_PORT$path")" "$path with a user"
 done
+
+# /client: a setup script for the laptop that asked, naming the user who
+# asked and the address the request came through -- the proxy's, when its
+# headers say so -- and never the password.
+script=$(curl -s -u alice:secret "http://127.0.0.1:$API_PORT/xymon/api/v1/client")
+assert_contains "URL=http://127.0.0.1:$API_PORT" "$script" "/client writes the address the request came to"
+assert_contains "USER=alice" "$script" "and the user who asked"
+assert_contains "NAME=xymon" "$script" "and the default name"
+assert_not_contains "secret" "$script" "and never the password"
+printf '%s\n' "$script" > "$work/setup.sh"
+sh -n "$work/setup.sh" || fail "/client's script does not parse: $(sh -n "$work/setup.sh" 2>&1)"
+assert_contains 'text/x-shellscript' "$(curl -s -D - -o /dev/null -u alice:secret "http://127.0.0.1:$API_PORT/xymon/api/v1/client" | tr 'A-Z' 'a-z')" "served as a shell script"
+proxied=$(curl -s -u alice:secret -H 'X-Forwarded-Host: xymon.example.ch' -H 'X-Forwarded-Proto: https' "http://127.0.0.1:$API_PORT/xymon/api/v1/client?name=xymon-lab")
+assert_contains "URL=https://xymon.example.ch" "$proxied" "behind a proxy, the proxy's address and scheme"
+assert_contains "NAME=xymon-lab" "$proxied" "and the name asked for"
+assert_contains 'xymon-api/$NAME.password' "$proxied" "which names the password file too"
+assert_equal "400" "$(curl -s -o /dev/null -w '%{http_code}' -u alice:secret "http://127.0.0.1:$API_PORT/xymon/api/v1/client?name=bad%20name")" "a name with a space"
+assert_equal "400" "$(curl -s -o /dev/null -w '%{http_code}' -u alice:secret "http://127.0.0.1:$API_PORT/xymon/api/v1/client?format=exe")" "a format that is neither"
+env=$(curl -s -u bob:s3cret "http://127.0.0.1:$API_PORT/xymon/api/v1/client?format=env")
+assert_contains "XYMONAPI_USER=bob" "$env" "format=env gives the settings, for the user who asked"
+assert_not_contains "git clone" "$env" "and no script"
 
 stop_process "$API_PID"
 API_PID=""

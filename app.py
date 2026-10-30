@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
+import clientsetup
 import xymon
 
 # To stderr, which the task's LOGFILE collects: $XYMONSERVERLOGS/xymonapi.log.
@@ -189,6 +190,27 @@ def _histlog(request):
     return JSONResponse(log)
 
 
+def _client(request):
+    """A setup script for the machine that asked: the API's own address and
+    the user who asked, so a laptop is set up with no name retyped."""
+    q = request.query_params
+    fmt = q.get("format", "sh")
+    if fmt not in ("sh", "env"):
+        return JSONResponse({"error": "bad_request", "detail": "format must be sh or env"},
+                            status_code=400)
+    try:
+        name = clientsetup.valid_name(q.get("name"))
+    except ValueError as exc:
+        return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
+    creds = xymon.parse_basic(request.headers.get("authorization"))
+    user = creds[0] if creds and xymon.XYMONAPI_PASSWD else ""
+    url = clientsetup.public_url(request.headers, str(request.url))
+    text = clientsetup.render(url, user, name, fmt)
+    media = "text/x-shellscript" if fmt == "sh" else "text/plain"
+    return Response(content=text, media_type=f"{media}; charset=utf-8",
+                    headers={"Content-Disposition": f'inline; filename="{name}-setup.{fmt}"'})
+
+
 ROUTES = {
     "/health": _health,
     "/states": _states,
@@ -200,6 +222,7 @@ ROUTES = {
     "/events": _events,
     "/histlog": _histlog,
     "/search": _search,
+    "/client": _client,
 }
 
 

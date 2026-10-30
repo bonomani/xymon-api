@@ -208,6 +208,22 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "502": { $ref: "#/components/responses/Upstream" }
 
+  /client:
+    get:
+      summary: A setup script for the machine that asks, with this API's address and the user who asked filled in.
+      operationId: clientSetup
+      parameters:
+        - { name: name,   in: query, schema: { type: string, default: xymon }, description: "The name the MCP server is registered under in Claude Code; one per Xymon server." }
+        - { name: format, in: query, schema: { type: string, enum: [sh, env], default: sh }, description: "sh, a script to read then run; env, the three settings alone." }
+      responses:
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "200":
+          description: The script, or the settings. It never holds the password.
+          content:
+            text/x-shellscript: { schema: { type: string } }
+            text/plain: { schema: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
 components:
   securitySchemes:
     basicAuth:
