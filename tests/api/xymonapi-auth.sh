@@ -102,7 +102,7 @@ mkdir -p "$work/stub" "$lap/src/.git" "$lap/prefix/libexec/xymonapi/venv/bin" "$
 printf '#!/bin/sh\nexit 0\n' > "$work/stub/git"
 cp "$work/stub/git" "$work/stub/make"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/claude.args"\n' "$lap" > "$work/stub/claude"
-: > "$lap/prefix/libexec/xymonapi/venv/bin/python3"
+printf '#!/bin/sh\nexit 0\n' > "$lap/prefix/libexec/xymonapi/venv/bin/python3"
 chmod 755 "$work/stub/git" "$work/stub/make" "$work/stub/claude" "$lap/prefix/libexec/xymonapi/venv/bin/python3"
 # A password file an earlier version of the script kept: it must go.
 printf '%s\n' "$hard" > "$lap/cfg/xymon-api/xymon.password"
@@ -139,6 +139,28 @@ assert_equal "130" "$rc" "Ctrl-C at the password prompt ends the script under ba
 assert_contains "echo on" "$out" "with echo back on"
 [ -e "$lap/cfg2/xymon-api/xymon.token" ] && fail "a token was kept after Ctrl-C"
 assert_equal "200" "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(cat "$tok")" "http://127.0.0.1:$API_PORT/xymon/api/v1/health")" "and none issued: the earlier token still works"
+
+# A virtualenv a run before left half made -- its python3 there, without
+# mcp -- is made again, not taken as it is: the Python here makes a venv
+# whose pip records that it ran.
+printf '#!/bin/sh\nexit 1\n' > "$lap/prefix/libexec/xymonapi/venv/bin/python3"
+cat > "$work/stub/python-venv" <<STUB
+#!/bin/sh
+if [ "\$1" = -m ]; then
+	mkdir -p "\$3/bin"
+	printf '#!/bin/sh\\nexit 0\\n' > "\$3/bin/python3"
+	printf '#!/bin/sh\\necho pip >> "$lap/pip.log"\\n' > "\$3/bin/pip"
+	chmod 755 "\$3/bin/python3" "\$3/bin/pip"
+fi
+exit 0
+STUB
+chmod 755 "$work/stub/python-venv"
+rc=0
+out=$(cd "$lap" && HOME="$lap" XDG_CONFIG_HOME="$lap/cfg" XYMONAPI_SRC="$lap/src" PATH="$work/stub:$PATH" \
+	XYMONAPI_PYTHON="$work/stub/python-venv" sh "$work/carol.sh" "$lap/prefix" 2>&1 < /dev/null) || rc=$?
+[ "$rc" -eq 0 ] || fail "the setup script failed with $rc over a half-made venv: $out"
+assert_file_exists "$lap/pip.log"
+assert_contains "pip" "$(cat "$lap/pip.log")" "a half-made venv is made again, and mcp installed in it"
 
 # Xymon's own password file is the default: with XYMONHOME set and
 # etc/xymonpasswd there, nothing else need be set, and the API asks for

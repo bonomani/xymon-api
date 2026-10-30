@@ -88,9 +88,12 @@ make -s -C "$SRC" install-client PREFIX="$PREFIX"
 
 # A virtualenv of its own for the mcp module: a system Python takes no
 # pip installs (PEP 668), and the launcher runs whatever XYMONAPI_PYTHON names.
+# One that a run before left half made -- a python3 without mcp, as when
+# the venv module is missing -- is made again.
 VENV=$PREFIX/libexec/xymonapi/venv
-if [ ! -x "$VENV/bin/python3" ]; then
+if ! "$VENV/bin/python3" -c 'import mcp' >/dev/null 2>&1; then
 	say "the Python module mcp, in $VENV"
+	rm -rf "$VENV"
 	"$PYTHON" -m venv "$VENV"
 	"$VENV/bin/pip" -q install -r "$SRC/mcp-server/requirements.txt"
 fi
