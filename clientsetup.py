@@ -91,9 +91,11 @@ if [ -n "$USER" ]; then
 		say "your password for $USER at $URL, kept in $PASSFILE (mode 600)"
 		mkdir -p "$(dirname "$PASSFILE")"
 		printf 'password: '
-		stty -echo 2>/dev/null || true
+		# Echo comes back however the read ends, Ctrl-C included.
+		stty -echo 2>/dev/null && trap 'stty echo 2>/dev/null' EXIT INT TERM
 		read -r pw
 		stty echo 2>/dev/null || true
+		trap - EXIT INT TERM
 		printf '\\n'
 		( umask 077 && printf '%s\\n' "$pw" > "$PASSFILE" )
 	fi
@@ -150,6 +152,8 @@ EOF
 """
 
 ENV = """# The Xymon API at {url}, for the user {user_or_none}: written by that API on {date}.
+# Three settings, as a shell reads them: source this file, or paste the
+# lines after export. Elsewhere, write the password file's path out in full.
 XYMONAPI_URL={url_q}
 XYMONAPI_USER={user_q}
 # The first line of this file is the password; create it with mode 600.
@@ -192,7 +196,9 @@ def installed_commit() -> str:
 
 
 def render(url: str, user: str, name: str, fmt: str) -> str:
-    passfile = f"${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/{name}.password"
+    # $HOME, not ${XDG_CONFIG_HOME:-...}: the same place the script's default
+    # is, written as the one expression every shell expands.
+    passfile = f"$HOME/.config/xymon-api/{name}.password"
     ref = installed_commit()
     # Where the address came from, said in the script: a Host header is the
     # requester's word, and XYMONAPI_PUBLIC_URL is the fix when it is wrong.
