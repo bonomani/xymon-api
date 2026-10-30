@@ -125,6 +125,21 @@ assert_not_contains 'PASSWORD' "$(cat "$lap/claude.args")" "and no password sett
 h=$(hostname 2>/dev/null || uname -n)
 assert_contains "\"client\":\"${h%%.*}\"" "$(curl -s -u "carol:$hard" "http://127.0.0.1:$API_PORT/xymon/api/v1/tokens")" "the token is for this machine's short name"
 
+# A Ctrl-C at the password prompt ends the script, with echo back on and
+# nothing asked, in bash too: bash, out of POSIX mode, runs a trap and goes
+# back to the read, which then shows the password as it is typed. On a
+# terminal, which tests/lib/ctrl-c.py gives it; a new config directory, so
+# the script asks; the token kept above shows that none was issued for this
+# machine, since one would have replaced it.
+mkdir -p "$lap/cfg2"
+rc=0
+out=$(cd "$lap" && HOME="$lap" XDG_CONFIG_HOME="$lap/cfg2" XYMONAPI_SRC="$lap/src" PATH="$work/stub:$PATH" \
+	"${XYMONAPI_PYTHON:-python3}" "$ROOT/tests/lib/ctrl-c.py" 'password: ' bash "$work/carol.sh" "$lap/prefix" 2>&1) || rc=$?
+assert_equal "130" "$rc" "Ctrl-C at the password prompt ends the script under bash ($out)"
+assert_contains "echo on" "$out" "with echo back on"
+[ -e "$lap/cfg2/xymon-api/xymon.token" ] && fail "a token was kept after Ctrl-C"
+assert_equal "200" "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(cat "$tok")" "http://127.0.0.1:$API_PORT/xymon/api/v1/health")" "and none issued: the earlier token still works"
+
 # Xymon's own password file is the default: with XYMONHOME set and
 # etc/xymonpasswd there, nothing else need be set, and the API asks for
 # what the web pages ask for. The empty string turns it off.

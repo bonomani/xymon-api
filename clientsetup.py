@@ -110,8 +110,11 @@ esc() {{ printf '%s' "$1" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g'; }}
 new_token() {{
 	say "a token for $CLIENT, for $USER at $URL: your password, once"
 	printf 'password: '
-	# Echo comes back however the read ends, Ctrl-C included.
-	stty -echo 2>/dev/null && trap 'stty echo 2>/dev/null' EXIT INT TERM
+	# Echo comes back however the read ends. A Ctrl-C also ends the script:
+	# bash, except in POSIX mode, runs the trap and goes back to the read, which
+	# would then show the password as it is typed.
+	stty -echo 2>/dev/null && trap 'stty echo 2>/dev/null' EXIT &&
+		trap 'stty echo 2>/dev/null; exit 130' INT TERM
 	read -r pw
 	stty echo 2>/dev/null || true
 	trap - EXIT INT TERM
