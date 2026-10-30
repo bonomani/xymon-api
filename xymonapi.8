@@ -137,9 +137,12 @@ the port when the web server is not on 80.
 Where xymond_history keeps the events and the saved status texts, for
 /events and /histlog.
 .IP "\fBXYMONAPI_PUBLIC_URL\fR, \fBXYMONAPI_REPO\fR"
-What /client writes: the address clients reach this API at, when the
-request's own is not it, and where the client code is fetched from,
-https://github.com/bonomani/xymon-api by default.
+What /client writes: the address clients reach this API at, and where the
+client code is fetched from, https://github.com/bonomani/xymon-api by
+default. Set XYMONAPI_PUBLIC_URL on a server other machines reach: without
+it the address is the one the request carried, in its Host or
+X-Forwarded-Host header, which is the requester's word, and the script
+says so in its first lines.
 .IP "\fBXYMONAPI_RAG_INDEX\fR, \fBXYMONAPI_RAG_MODEL\fR, \fBXYMONAPI_RAG_OFFLINE\fR"
 The index /search reads, and the embedding model, as for xymonapi-rag(1),
 which writes the index with the same settings from the same file.

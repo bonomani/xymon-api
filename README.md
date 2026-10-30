@@ -93,7 +93,25 @@ curl -u me https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
 sh xymon-setup.sh
 ```
 
+Where the certificate is the server's own, xymond's, and not one this
+machine trusts, copy it first to where the script will look for it, and
+name it to curl. Never `-k`: a script fetched without checking the
+certificate could be anyone's, and running it runs that code.
+
+```sh
+mkdir -p ~/.config/xymon-api
+scp xymon.example.ch:/etc/xymon/tls/xymond.pem ~/.config/xymon-api/xymon-ca.pem
+curl --cacert ~/.config/xymon-api/xymon-ca.pem -u me \
+  https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
+sh xymon-setup.sh
+```
+
 It carries the API's address and your user name, and never the password.
+The address is `XYMONAPI_PUBLIC_URL` when the server sets it, else the one
+the request came through, from its `Host` header, which the script says in
+its first lines: set `XYMONAPI_PUBLIC_URL` on any server other machines
+reach, so that the script carries the address you mean and not the one a
+request happened to use.
 It clones this repository at the commit the server was installed from, so
 both sides run the same code, runs `make install-client`, makes a virtualenv
 with the `mcp` module, asks for your password once into
@@ -121,6 +139,7 @@ manual page named.
 | `XYMONAPI_LISTEN` | where the API listens, HOST:PORT | `127.0.0.1:1986` |
 | `XYMONAPI_PASSWD` | an htpasswd file; every request needs a user from it; empty for none | Xymon's `etc/xymonpasswd` when it exists |
 | `XYMONAPI_TLS_CERT`, `_KEY` | a certificate and key; with them the API speaks HTTPS | xymond's `etc/tls/xymond.pem` and `.key` when they exist |
+| `XYMONAPI_PUBLIC_URL` | the address `/client` writes; set it on a server other machines reach | the address the request came through |
 | `XYMONAPI_HIDE` | a file of regular expressions; what they match is `[hidden]` in every text returned | none |
 | `XYMONAPI_PYTHON` | the Python 3.10+ to run with | `python3` on PATH |
 | `XYMONAPI_URL` | where the API is, for the MCP server and the search | `http://127.0.0.1:1986` |

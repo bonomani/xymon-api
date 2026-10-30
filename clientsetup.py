@@ -28,6 +28,7 @@ _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 SCRIPT = """#!/bin/sh
 # Set up this machine as a client of the Xymon API at {url}:
 # written by that API on {date} for the user {user_or_none}.
+# The address is {url_from}.
 # Read it, then run it. It installs under PREFIX (~/.local by default),
 # asks for your password once, checks the API answers, and registers the
 # MCP server with Claude Code under the name {name} when claude is here.
@@ -193,7 +194,13 @@ def installed_commit() -> str:
 def render(url: str, user: str, name: str, fmt: str) -> str:
     passfile = f"${{XDG_CONFIG_HOME:-$HOME/.config}}/xymon-api/{name}.password"
     ref = installed_commit()
+    # Where the address came from, said in the script: a Host header is the
+    # requester's word, and XYMONAPI_PUBLIC_URL is the fix when it is wrong.
+    url_from = ("XYMONAPI_PUBLIC_URL, set on the server" if PUBLIC_URL and url == PUBLIC_URL
+                else "the one this request came through (its Host header); if it is "
+                     "wrong, set XYMONAPI_PUBLIC_URL on the server")
     vars_ = dict(url=url, url_q=shlex.quote(url), user=user, user_q=shlex.quote(user),
+                 url_from=url_from,
                  ref=ref, ref_q=shlex.quote(ref),
                  user_or_none=user or "(none: the API asks for no password)",
                  name=name, name_q=shlex.quote(name), repo=REPO, repo_q=shlex.quote(REPO),
