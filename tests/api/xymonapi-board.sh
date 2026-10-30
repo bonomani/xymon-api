@@ -28,7 +28,7 @@ work=$(mktempdir)
 XYMOND_PID=""
 register_cleanup 'stop_process "$API_PID" "$XYMOND_PID"'
 
-printf 'page test Test\n127.0.0.1 red.example.com # conn\n127.0.0.1 green.example.com # conn\n127.0.0.1 disk.example.com # disk\n127.0.0.1 dis.example.com # conn\n127.0.0.1 disk2.example.com # disk\n127.0.0.1 enc.example.com # conn\n127.0.0.1 lt.example.com # conn\n' > "$work/hosts.cfg"
+printf 'page test Test\n127.0.0.1 red.example.com # conn\n127.0.0.1 green.example.com # conn\n127.0.0.1 disk.example.com # disk\n127.0.0.1 dis.example.com # conn\n127.0.0.1 disk2.example.com # disk\n127.0.0.1 enc.example.com # conn\n127.0.0.1 lt.example.com # conn\n127.0.0.1 enc2.example.com # procs\n' > "$work/hosts.cfg"
 
 mkdir -p "$work/home/etc" "$work/home/tmp" "$work/home/www"
 require_cfg XYMONSERVER_CFG "$XYMON_SRC/xymond/etcfiles/xymonserver.cfg"
@@ -74,7 +74,15 @@ cookie=$("$XYMONCLIENT" "127.0.0.1:$PORT" "xymondboard host=red.example.com test
 send "xymondack $cookie 0 already over"
 sleep 0.4
 
-export XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:$PORT"
+# A status with a secret in it, as a process list shows a command line.
+send "status enc2,example,com.procs green up
+root  1234  mysqld --password=hunter2 --port=3306
+Token: abc"
+sleep 0.4
+
+# XYMONAPI_HIDE: what its expressions match is [hidden] in every text.
+printf '# secrets on command lines\npassword=\\S+\n\nToken: \\w+\n' > "$work/hide"
+export XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:$PORT" XYMONAPI_HIDE="$work/hide"
 start_api
 
 health=$(api_get /health)
@@ -118,6 +126,29 @@ assert_contains '"text":"C:\\temp | cpu\tload \\n not a newline"' "$enc" "a pipe
 assert_contains '"text":"up for 5h"' "$(api_get '/status?entity=lt.example.com&test=conn')" "the command line is left out when it has a lifetime with a unit and a group"
 assert_not_contains '"acknowledged"' "$(api_get '/status?entity=red.example.com&test=conn')" "an acknowledgement that ran out is not reported, though xymond still carries it"
 assert_equal "400" "$(api_code '/status?entity=../etc&test=disk')" "/status with a host name that is a path"
+
+hid=$(api_get '/status?entity=enc2.example.com&test=procs')
+assert_contains 'mysqld --[hidden] --port=3306' "$hid" "XYMONAPI_HIDE blanks a password on a command line"
+assert_contains '[hidden]' "$hid" "and a token"
+assert_not_contains 'hunter2' "$hid" "the password is gone"
+assert_not_contains 'abc' "$hid" "and so is the token"
+assert_contains 'Filesystems NOT ok' "$(api_get '/status?entity=disk.example.com&test=disk')" "other texts are untouched"
+assert_contains 'cleaning old kernels' "$(api_get '/status?entity=disk.example.com&test=disk')" "an acknowledgement too"
+# A file of expressions that is not one stops the API: silently hiding
+# nothing would be worse.
+stop_process "$API_PID"; API_PID=""
+printf 'password=(\n' > "$work/badhide"
+rc=0
+XYMONAPI_HIDE="$work/badhide" XYMONAPI_LISTEN="127.0.0.1:$API_PORT" "$ROOT/xymonapi.sh" > "$work/badhide.log" 2>&1 || rc=$?
+assert_equal "1" "$rc" "the API with an expression that is not one"
+assert_contains 'XYMONAPI_HIDE' "$(cat "$work/badhide.log")" "and says which setting"
+assert_contains 'line 1' "$(cat "$work/badhide.log")" "and which line"
+rc=0
+XYMONAPI_HIDE="$work/no-such-file" XYMONAPI_LISTEN="127.0.0.1:$API_PORT" "$ROOT/xymonapi.sh" > "$work/nohide.log" 2>&1 || rc=$?
+assert_equal "1" "$rc" "the API with a hide file it cannot read"
+assert_contains 'cannot read XYMONAPI_HIDE' "$(cat "$work/nohide.log")" "and says so"
+unset XYMONAPI_HIDE
+start_api
 
 assert_equal "404" "$(api_code /views)" "an operation the API does not implement"
 

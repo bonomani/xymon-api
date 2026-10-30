@@ -119,6 +119,7 @@ manual page named.
 |---|---|---|
 | `XYMONAPI_LISTEN` | where the API listens, HOST:PORT | `127.0.0.1:1986` |
 | `XYMONAPI_PASSWD` | an htpasswd file; set, every request needs a user from it | none: no password |
+| `XYMONAPI_HIDE` | a file of regular expressions; what they match is `[hidden]` in every text returned | none |
 | `XYMONAPI_PYTHON` | the Python 3.10+ to run with | `python3` on PATH |
 | `XYMONAPI_URL` | where the API is, for the MCP server and the search | `http://127.0.0.1:1986` |
 | `XYMONAPI_USER`, `XYMONAPI_PASSWORD` | the user and password they send | none |
@@ -132,23 +133,37 @@ manual page named.
 | `XYMONAPI_RAG_LLM_URL`, `_MODEL`, `_KEY` | the language model `ask` uses: any OpenAI-compatible server, Ollama or LM Studio | a local Ollama, `llama3.1`, no key |
 | `XYMONAPI_RAG_LLM_MAX_TOKENS`, `_TIMEOUT` | the model's token budget, and how long `ask` waits | `2048`, `300` seconds |
 
-The first three are `xymonapi.8`'s; the next three `xymonapi-mcp.1`'s; the
+The first four are `xymonapi.8`'s; the next three `xymonapi-mcp.1`'s; the
 rest `xymonapi-rag.1`'s, and the API reads `XYMONAPI_RAG_INDEX`, `_MODEL`
 and `_OFFLINE` too, for `/search`.
 
 ## Reaching the API from elsewhere
 
-The API listens on 127.0.0.1 and speaks plain HTTP, so a password would
-cross the network in the clear. From another machine, either:
+Xymon is what you look at when the rest is down, so the API depends on
+nothing central: no directory, no certificate authority, no DNS. It speaks
+plain HTTP, as xymond does on 1984, and listens on 127.0.0.1 unless told
+otherwise. Encryption is a choice, and the rule of thumb is: do as you do
+for the Xymon web pages. From another machine, one of:
 
+- **The API's own port, open**: `XYMONAPI_LISTEN="0.0.0.0:1986"` on the
+  server, `XYMONAPI_URL=http://xymon-server:1986` on the laptop. Simplest,
+  unencrypted: right where the Xymon pages are plain HTTP on a trusted
+  network, wrong across the Internet.
 - **An SSH tunnel**, for one person: `ssh -L 1986:127.0.0.1:1986 xymon-server`,
-  then `XYMONAPI_URL=http://127.0.0.1:1986` as if local. Nothing to set up
-  on the server.
-- **The web server in front of it**, for everyone: `make install` writes
-  `$XYMONHOME/etc/xymonapi-apache.conf`, a `ProxyPass` of `/xymon/api/` to
-  the API, served over HTTPS only. Include it next to `xymon-apache.conf`,
+  then `XYMONAPI_URL=http://127.0.0.1:1986` as if local. Encrypted,
+  nothing to set up on the server.
+- **The web server in front of it**, for everyone, encrypted where it is:
+  `make install` writes `$XYMONHOME/etc/xymonapi-apache.conf`, a `ProxyPass`
+  of `/xymon/api/` to the API. Include it next to `xymon-apache.conf`,
   enable `mod_proxy` and `mod_proxy_http`, and set `XYMONAPI_PASSWD` so the
   API asks for a password. Then `XYMONAPI_URL=https://xymon.example.ch`.
+
+Whichever you choose, keep the secrets out of the texts: the API is
+read-only and shows what the web pages show, and a process list can carry
+a password typed on a command line. `XYMONAPI_HIDE` names a file of
+regular expressions whose matches come out as `[hidden]`, on every text and
+in the search index built from them. And give each person a user of their
+own in the htpasswd file, so the password is theirs alone.
 
 Either way, check from the laptop before anything else:
 
@@ -246,9 +261,10 @@ two Xymon servers, register twice under two names, `xymon-prod` and
 `xymon-lab`, each with its own URL and password file. The two searches
 answer a tool error until the server has an index.
 
-For an API on another machine, use HTTPS through a web server in front of
-it, as `xymonapi.8` says: over plain HTTP, a password crosses the network in
-the clear.
+For an API on another machine, see
+[Reaching the API from elsewhere](#reaching-the-api-from-elsewhere): over
+plain HTTP the password crosses the network in the clear, which is fine
+where the Xymon pages are plain too and not elsewhere.
 
 Every tool and setting is in
 [`mcp-server/xymonapi-mcp.1`](mcp-server/xymonapi-mcp.1).
@@ -299,7 +315,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 | test, under `tests/api/` | what it checks |
 |---|---|
 | `xymonapi-auth` | `XYMONAPI_PASSWD` lets in only the users of its htpasswd file; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through |
-| `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled |
+| `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled; `XYMONAPI_HIDE` blanks secrets, and a bad expression stops the API |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
 | `xymonapi-series` | `/series` reads an RRD, an HTTP test's too, answers 404 and 400 as documented, and refuses names that leave `XYMONRRDS` |
 | `xymonapi-graphs` | `/graphs` reaches `showgraph.sh` through `XYMONWEBHOST` when `XYMONSERVERCGIURL` is a path |

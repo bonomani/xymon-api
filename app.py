@@ -234,6 +234,15 @@ def build_app() -> FastAPI:
     base = spec["servers"][0]["url"].rstrip("/")
     app = FastAPI(title=spec["info"]["title"], version=spec["info"]["version"])
 
+    try:
+        n = xymon.load_hide()
+    except OSError as exc:
+        sys.exit(f"xymonapi: cannot read XYMONAPI_HIDE={xymon.HIDE_FILE}: {exc.strerror}")
+    except ValueError as exc:
+        sys.exit(f"xymonapi: XYMONAPI_HIDE: {exc} is not a regular expression")
+    if n:
+        log.info("hiding what %d expression(s) of %s match", n, xymon.HIDE_FILE)
+
     if xymon.XYMONAPI_PASSWD:
         # Refuse to start rather than answer 401 to everyone, which looks
         # like a wrong password when it is a wrong setting.

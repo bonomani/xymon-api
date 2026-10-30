@@ -154,6 +154,41 @@ def entities() -> list[dict]:
 _STATUS_FIELDS = ["hostname", "testname", "color", "lastchange", "logtime",
                   "acktime", "disabletime", "ackmsg", "dismsg", "msg"]
 _STATUS_MAX = 1024 * 1024
+
+# XYMONAPI_HIDE names a file of regular expressions, one per line; what they
+# match is replaced by [hidden] in every text the API returns -- a status,
+# an acknowledgement, a saved status -- so that a password typed on a
+# command line and caught in a process list does not travel further than
+# the web page it is already on. Read once, at start.
+HIDE_FILE = os.environ.get("XYMONAPI_HIDE", "")
+HIDDEN = "[hidden]"
+_hide: list[re.Pattern] = []
+
+
+def load_hide() -> int:
+    """Compile XYMONAPI_HIDE; the number of expressions. Raises ValueError,
+    with the line, for one that is not a regular expression, and OSError for
+    a file that cannot be read: the API then refuses to start, rather than
+    run without the hiding it was asked for."""
+    _hide.clear()
+    if not HIDE_FILE:
+        return 0
+    with open(HIDE_FILE, encoding="utf-8") as fd:
+        for n, line in enumerate(fd, 1):
+            line = line.rstrip("\n")
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            try:
+                _hide.append(re.compile(line))
+            except re.error as e:
+                raise ValueError(f"{HIDE_FILE} line {n}: {e}") from e
+    return len(_hide)
+
+
+def hide(text: str) -> str:
+    for rx in _hide:
+        text = rx.sub(HIDDEN, text)
+    return text
 # The command that set the status: "status", with a lifetime ("+5h") or a
 # group ("/group:web") or both, then HOST.TEST, then the colour, then xymond's
 # flags comment.
@@ -191,7 +226,7 @@ def status(entity: str | None, test: str | None) -> dict:
     # The text begins with the command that set it, "status+30
     # host,example,com.conn red", and xymond's flags comment, which the web
     # page does not show either.
-    text = _STATUS_HEAD.sub("", _nldecode(d["msg"]), count=1)[:_STATUS_MAX]
+    text = hide(_STATUS_HEAD.sub("", _nldecode(d["msg"]), count=1)[:_STATUS_MAX])
     now = int(time.time())
     out = {"entity": host, "test": tst, "verdict": _verdict(d["color"]),
            "time": _iso(d["lastchange"]), "updated": _iso(d["logtime"]),
@@ -200,14 +235,14 @@ def status(entity: str | None, test: str | None) -> dict:
     # arrives; until then the board still carries it, and its XML output
     # too reports it only while acktime is ahead of now.
     if _DIGITS.fullmatch(d["acktime"]) and int(d["acktime"]) > now:
-        out["acknowledged"] = {"until": _iso(d["acktime"]), "text": _nldecode(d["ackmsg"])}
+        out["acknowledged"] = {"until": _iso(d["acktime"]), "text": hide(_nldecode(d["ackmsg"]))}
     # Disabled by hand, with an end time or -1 for "until it is ok again"; or
     # blue from a DOWNTIME tag in hosts.cfg, with no end time and the words
     # "Planned downtime".
     until = d["disabletime"]
     if d["color"] == "blue" or (_DIGITS.fullmatch(until) and until != "0"):
         out["disabled"] = {"until": _iso(until) if _DIGITS.fullmatch(until) and until != "0" else None,
-                           "text": _nldecode(d["dismsg"])}
+                           "text": hide(_nldecode(d["dismsg"]))}
     return out
 
 
@@ -397,7 +432,7 @@ def histlog(entity: str | None, test: str | None, when: str | None) -> dict:
     # characters, of which 1 MiB could be four times as much.
     with open(path, "rb") as fd:
         text = fd.read(_HISTLOG_MAX).decode("utf-8", errors="replace")
-    return {"entity": host, "test": tst, "time": _iso(when), "text": text}
+    return {"entity": host, "test": tst, "time": _iso(when), "text": hide(text)}
 
 # --- HTTP Basic authentication -----------------------------------------------
 # The users are the web pages' own: the htpasswd file useradm and chpasswd

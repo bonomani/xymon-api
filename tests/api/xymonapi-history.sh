@@ -44,6 +44,10 @@ printf 'red Tue Nov  7 23:33:20 2023 HTTP 500 from /login\n' \
 
 export TZ=UTC XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:1" \
 	XYMONHISTDIR="$work/hist" XYMONHISTLOGS="$work/histlogs"
+# A saved status with a secret in it; XYMONAPI_HIDE blanks it in /histlog too.
+printf 'db_pass=s3cret\n' >> "$work/histlogs/web_example_com/http/Tue_Nov_7_23:33:20_2023"
+printf 'db_pass=\\S+\n' > "$work/hide"
+export XYMONAPI_HIDE="$work/hide"
 start_api
 
 all=$(api_get /events)
@@ -68,6 +72,8 @@ assert_contains '"epoch":1699400300' "$since" "and keeps one at that very time"
 
 log=$(api_get '/histlog?entity=web.example.com&test=http&time=1699400000')
 assert_contains 'HTTP 500 from /login' "$log" "/histlog returns the saved status text"
+assert_contains '[hidden]' "$log" "with what XYMONAPI_HIDE matches blanked"
+assert_not_contains 's3cret' "$log" "and the secret gone"
 
 assert_equal "404" "$(api_code '/histlog?entity=web.example.com&test=http&time=1699400001')" "a time with no saved status"
 assert_equal "400" "$(api_code '/histlog?entity=../web.example.com&test=http&time=1699400000')" "a host name with ../"

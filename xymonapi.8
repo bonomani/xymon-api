@@ -143,7 +143,7 @@ https://github.com/bonomani/xymon-api by default.
 The index /search reads, and the embedding model, as for xymonapi-rag(1),
 which writes the index with the same settings from the same file.
 .LP
-Three settings are its own. Put them in a file under
+Four settings are its own. Put them in a file under
 \fBxymonserver.d/\fR beside xymonserver.cfg, which reads its files, for
 instance xymonapi.cfg:
 .IP "\fBXYMONAPI_LISTEN\fR"
@@ -156,6 +156,15 @@ whose users useradm.cgi and chpasswd.cgi manage. The password is checked by
 Apache's htpasswd program, which must be on PATH; xymonapi does not start
 if it is not, or if it cannot read the file.
 When unset, xymonapi answers anyone who can reach it.
+.IP "\fBXYMONAPI_HIDE\fR"
+A file of regular expressions, one per line, # for a comment. Whatever
+they match is replaced by [hidden] in every text the API returns: a
+status, an acknowledgement or disabling, a saved status -- and so in the
+search index built from them. A process list can show a password typed on
+a command line; a line such as \fBpassword=\\S+\fR keeps it off the API,
+whatever the web page shows. Read at start: an expression that is not one,
+or a file that cannot be read, stops the API from starting, since running
+without the hiding asked for would be worse than not running.
 .IP "\fBXYMONAPI_PYTHON\fR"
 The Python to run the API with, when the modules it needs are not installed
 for the system's python3: the python3 of a virtualenv that holds them, for
@@ -171,11 +180,11 @@ The xymonlaunch task, installed with a DISABLED line. A later installation
 leaves it as it is.
 .IP "\fB$XYMONHOME/etc/xymonapi-apache.conf\fR"
 An Apache snippet that serves the API through the web server, for other
-machines: a ProxyPass of /xymon/api/ to 127.0.0.1:1986, over HTTPS only.
-Include it where xymon-apache.conf is included. Installed once; a later
-installation leaves it as it is.
+machines: a ProxyPass of /xymon/api/ to 127.0.0.1:1986, over HTTPS where
+the server has it. Include it where xymon-apache.conf is included.
+Installed once; a later installation leaves it as it is.
 .IP "\fB$XYMONHOME/etc/xymonserver.d/\fR"
-A file of yours here holds the three settings of its own listed under
+A file of yours here holds the four settings of its own listed under
 ENVIRONMENT. Nothing is installed there.
 .IP "\fB$XYMONSERVERLOGS/xymonapi.log\fR"
 The log, written through the task's LOGFILE. A missing Python or module is
@@ -190,10 +199,17 @@ is a 502. Its answer names the reason when the text is xymonapi's own, as
 "XYMONRRDS is not set"; a program's error text, which can hold paths and
 settings, goes to the log instead, and the answer says so.
 
-xymonapi speaks plain HTTP. To reach it from other machines over HTTPS, keep
-it on 127.0.0.1 and put a web server in front of it, as for the CGI programs:
-xymonapi-apache.conf, under FILES, does that for Apache. Within one machine,
-or through an SSH tunnel to it, nothing more is needed.
+xymonapi speaks plain HTTP, as xymond does on port 1984, and needs nothing
+central -- no directory, no certificate authority, no name service -- so
+that it answers when the rest of the network is in trouble: Xymon is what
+one looks at then. Encryption is a choice, made as for the web pages: where
+those are served over plain HTTP on a trusted network, the API can listen
+on that network too (XYMONAPI_LISTEN); where they are served over HTTPS,
+put the API behind the same web server, with xymonapi-apache.conf under
+FILES, and keep it on 127.0.0.1. Within one machine, or through an SSH
+tunnel to it, nothing more is needed. What must not leak either way are
+secrets: the password file, which only the Xymon user reads, and what
+XYMONAPI_HIDE blanks out of the texts.
 
 Requests are served from a thread pool: a slow one holds up itself alone.
 
