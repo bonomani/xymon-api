@@ -69,6 +69,12 @@ def _refused(exc: Exception) -> JSONResponse:
 # request and not the event loop -- /health keeps answering meanwhile.
 def _health(request):
     out: dict = {"alive": False, "search": _search_info()}
+    # The commit this API was installed from, for the /client script to
+    # install the same: here, behind the password, not in /client, which
+    # anyone may fetch.
+    commit = clientsetup.installed_commit()
+    if commit:
+        out["commit"] = commit
     try:
         version = xymon.ping()
     except Exception as exc:                        # noqa: BLE001
@@ -192,8 +198,9 @@ def _histlog(request):
 
 
 def _client(request):
-    """A setup script for the machine that asked: the API's own address and
-    the user who asked, so a laptop is set up with no name retyped."""
+    """A setup script for the machine that asked, with the API's own address,
+    so a laptop is set up with no name retyped. Open to anyone: it holds
+    nothing secret, and the script asks for the user and password itself."""
     q = request.query_params
     fmt = q.get("format", "sh")
     if fmt not in ("sh", "env"):
@@ -203,9 +210,8 @@ def _client(request):
         name = clientsetup.valid_name(q.get("name"))
     except ValueError as exc:
         return JSONResponse({"error": "bad_request", "detail": str(exc)}, status_code=400)
-    user = getattr(request.state, "user", "")
     url = clientsetup.public_url(request.headers, str(request.url))
-    text = clientsetup.render(url, user, name, fmt)
+    text = clientsetup.render(url, name, fmt)
     media = "text/x-shellscript" if fmt == "sh" else "text/plain"
     return Response(content=text, media_type=f"{media}; charset=utf-8",
                     headers={"Content-Disposition": f'inline; filename="{name}-setup.{fmt}"'})
@@ -302,13 +308,17 @@ def build_app() -> FastAPI:
 
         # Every path, not only the API's: FastAPI also serves /openapi.json
         # and its /docs pages, and with a password set nothing is answered
-        # to a stranger.
+        # to a stranger but /client.
         def refuse(detail: str) -> JSONResponse:
             return JSONResponse({"error": "unauthorized", "detail": detail}, status_code=401,
                                 headers={"WWW-Authenticate": 'Basic realm="xymon"'})
 
         @app.middleware("http")
         async def _auth(request, call_next):
+            # /client alone is open: its script asks for the password itself,
+            # and a password here would be asked a second time for nothing.
+            if request.url.path == base + "/client":
+                return await call_next(request)
             header = request.headers.get("authorization") or ""
             if header.startswith("Bearer "):
                 # A token opens every path but the token operations: it may

@@ -35,8 +35,11 @@ DELETE on /tokens, and any other path answers 404.
 .IP "\fB/health\fR"
 Whether xymond answers a ping: {"alive":true,"server_version":"xymond ..."}
 when it does, and {"alive":false} when the ping fails -- xymond is down, or
-XYMSRV or XYMON is wrong. Like every path, it answers 401 without a user, or
-a client token, when XYMONAPI_PASSWD is set.
+XYMSRV or XYMON is wrong. Like every path but /client, it answers 401
+without a user, or a client token, when XYMONAPI_PASSWD is set.
+Its "commit" field is the git commit this API was installed from, when
+make install ran in a checkout, and is absent otherwise: the /client script
+installs the same on the laptop.
 Its "search" field describes the index /search reads -- how many passages
 of manual pages and of history, when it was built -- and is null when there
 is none.
@@ -71,18 +74,20 @@ or the modules in rag/requirements.txt are missing: search is optional, and
 the other operations need neither.
 .IP "\fB/client\fR [\fBname\fR=NAME] [\fBformat\fR=sh|env]"
 A setup script for the machine that asks -- a laptop -- with this API's
-address and the user who asked written in: it fetches the client code at
-the commit this API was installed from (recorded by make install in a git
-checkout; the newest otherwise), runs make install-client, makes a
-virtualenv with the mcp module, checks it reaches this API and trusts its
-certificate, asks for the password once to get the machine a token (see
-TOKENS) and keeps the token, not the password, checks /health answers, and
-registers the MCP server with Claude Code and with Codex, each when it is
-installed, under NAME (xymon by default; one name per Xymon server). To be read,
-then run. The address is XYMONAPI_PUBLIC_URL when set, else the one the
-request came through: the web server's, with X-Forwarded-Host and
-X-Forwarded-Proto, as xymonapi-apache.conf sends them. The password is
-never in it. format=env gives the three settings alone.
+address written in. It is the one path open without a user when
+XYMONAPI_PASSWD is set: it holds no user, password or commit. The script
+checks it reaches this API and trusts its certificate; asks for the user
+(XYMONAPI_USER when set) and the password once, to get the machine a token
+(see TOKENS), and keeps the token, not the password; reads from /health,
+with the token, the commit this API was installed from, and fetches the
+client code at that commit (the newest when /health gives none); runs make
+install-client; makes a virtualenv with the mcp module; checks /health
+answers; and registers the MCP server with Claude Code and with Codex, each
+when it is installed, under NAME (xymon by default; one name per Xymon
+server). To be read, then run. The address is XYMONAPI_PUBLIC_URL when set,
+else the one the request came through: the web server's, with
+X-Forwarded-Host and X-Forwarded-Proto, as xymonapi-apache.conf sends them.
+format=env gives the two settings alone.
 .IP "\fB/series\fR \fBentity\fR=HOST \fBtest\fR=TEST [\fBmetric\fR=DATASET] [\fBfrom\fR=TIME] [\fBto\fR=TIME]"
 The values of one dataset of the RRD file TEST.rrd of HOST, under
 $XYMONRRDS, read with rrdtool. TEST is the file's name, not the column on
@@ -177,8 +182,8 @@ instance xymonapi.cfg:
 The address and port to listen on, as HOST:PORT or [ADDRESS]:PORT for IPv6.
 The default is 127.0.0.1:1986, which only this machine reaches.
 .IP "\fBXYMONAPI_PASSWD\fR"
-An htpasswd file: every request needs a user and password from it, and is
-answered 401 otherwise. The default is Xymon's own,
+An htpasswd file: every request but /client needs a user and password
+from it, or a client token, and is answered 401 otherwise. The default is Xymon's own,
 $XYMONHOME/etc/xymonpasswd, when it exists -- the file the web pages use,
 whose users useradm.cgi and chpasswd.cgi manage -- so the API asks for
 what the pages ask for with nothing set. Set it to another file, or to the

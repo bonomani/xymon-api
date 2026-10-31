@@ -9,12 +9,14 @@
 # its default and what Xymon's useradm and chpasswd create, and bcrypt. Every
 # path is covered, /openapi.json and FastAPI's /docs included. A user
 # name that looks like an option is refused, not passed to htpasswd as one.
-# A password file the API cannot read stops it from starting. /client
-# writes a setup script for the user who asked, at the address asked; run
-# as a laptop runs it, that script gets a password holding a space, a
-# quote, a backslash and a glob character to the API as it is, keeps the
-# token it gets for this machine's short hostname instead of the password,
-# and registers the MCP server with that token file.
+# A password file the API cannot read stops it from starting. /client alone
+# is open: it writes a setup script with the address asked and no user or
+# commit; /health gives the commit, to a user. Run as a laptop runs it, the
+# script asks for the user and gets a password holding a space, a quote, a
+# backslash and a glob character to the API as it is, keeps the token it
+# gets for this machine's short hostname instead of the password, installs
+# the commit /health gives, and registers the MCP server with that token
+# file.
 #
 # Skips where the API cannot run (tests/lib/xymonapi.sh). Needs the xymon
 # client of the Xymon tree in XYMON_SRC (for a free port), Apache's htpasswd
@@ -38,8 +40,16 @@ htpasswd -bB "$work/htpasswd" bob s3cret 2>/dev/null
 grep -q '^alice:\$apr1\$' "$work/htpasswd" || fail "htpasswd did not write alice in its \$apr1\$ format"
 grep -q '^bob:\$2y\$' "$work/htpasswd" || fail "htpasswd did not write bob as bcrypt"
 
+# The API as make install lays it out, with a commit recorded beside it, so
+# that /health has one to give and the script one to install.
+"${MAKE:-make}" -C "$ROOT" install XYMONHOME="$work/inst" MANDIR="$work/man" >"$work/install.log" 2>&1 \
+	|| fail "make install failed: $(tail -n 5 "$work/install.log")"
+commit=0123456789abcdef0123456789abcdef01234567
+printf '%s\n' "$commit" > "$work/inst/ext/xymonapi/COMMIT"
+API_ROOT=$work/inst/ext/xymonapi
+
 # The answers checked here need no xymond: /health says alive:false without
-# one, and the password is checked first, on every path.
+# one, and the password is checked first, on every path but /client.
 export XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:1" XYMONAPI_PASSWD="$work/htpasswd" \
 	XYMONAPI_TOKENS="$work/tokens/tokens"
 start_api
@@ -64,43 +74,47 @@ for path in /openapi.json /docs; do
 	assert_equal "200" "$(curl -s -o /dev/null -w '%{http_code}' -u alice:secret "http://127.0.0.1:$API_PORT$path")" "$path with a user"
 done
 
-# /client: a setup script for the laptop that asked, naming the user who
-# asked and the address the request came through -- the proxy's, when its
-# headers say so -- and never the password.
-script=$(curl -s -u alice:secret "http://127.0.0.1:$API_PORT/xymon/api/v1/client")
+# /client: open, a password set or not, since its script holds nothing
+# secret -- the address the request came through, the proxy's when its
+# headers say so, and no user or commit. The commit is /health's, behind
+# the password.
+assert_equal "200" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT/xymon/api/v1/client")" "/client without a user"
+script=$(curl -s "http://127.0.0.1:$API_PORT/xymon/api/v1/client")
 assert_contains "URL=http://127.0.0.1:$API_PORT" "$script" "/client writes the address the request came to"
-assert_contains "USER=alice" "$script" "and the user who asked"
 assert_contains "NAME=xymon" "$script" "and the default name"
-assert_not_contains "secret" "$script" "and never the password"
+printf '%s\n' "$script" | grep -q '^USER=' && fail "/client wrote a USER= line"
+assert_not_contains "$commit" "$script" "and not the commit"
+assert_contains "\"commit\":\"$commit\"" "$(curl -s -u alice:secret "$url")" "/health gives the commit to a user"
+assert_not_contains "$commit" "$(curl -s "$url")" "and not to a stranger"
 printf '%s\n' "$script" > "$work/setup.sh"
 sh -n "$work/setup.sh" || fail "/client's script does not parse: $(sh -n "$work/setup.sh" 2>&1)"
-assert_contains 'text/x-shellscript' "$(curl -s -D - -o /dev/null -u alice:secret "http://127.0.0.1:$API_PORT/xymon/api/v1/client" | tr 'A-Z' 'a-z')" "served as a shell script"
-proxied=$(curl -s -u alice:secret -H 'X-Forwarded-Host: xymon.example.ch' -H 'X-Forwarded-Proto: https' "http://127.0.0.1:$API_PORT/xymon/api/v1/client?name=xymon-lab")
+assert_contains 'text/x-shellscript' "$(curl -s -D - -o /dev/null "http://127.0.0.1:$API_PORT/xymon/api/v1/client" | tr 'A-Z' 'a-z')" "served as a shell script"
+proxied=$(curl -s -H 'X-Forwarded-Host: xymon.example.ch' -H 'X-Forwarded-Proto: https' "http://127.0.0.1:$API_PORT/xymon/api/v1/client?name=xymon-lab")
 assert_contains "URL=https://xymon.example.ch" "$proxied" "behind a proxy, the proxy's address and scheme"
 assert_contains "NAME=xymon-lab" "$proxied" "and the name asked for"
 assert_contains 'xymon-api/$NAME.password' "$proxied" "which names the password file too"
-assert_equal "400" "$(curl -s -o /dev/null -w '%{http_code}' -u alice:secret "http://127.0.0.1:$API_PORT/xymon/api/v1/client?name=bad%20name")" "a name with a space"
-assert_equal "400" "$(curl -s -o /dev/null -w '%{http_code}' -u alice:secret "http://127.0.0.1:$API_PORT/xymon/api/v1/client?format=exe")" "a format that is neither"
-env=$(curl -s -u bob:s3cret "http://127.0.0.1:$API_PORT/xymon/api/v1/client?format=env")
-assert_contains "for the user bob" "$env" "format=env gives the settings, for the user who asked"
+assert_equal "400" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT/xymon/api/v1/client?name=bad%20name")" "a name with a space"
+assert_equal "400" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$API_PORT/xymon/api/v1/client?format=exe")" "a format that is neither"
+env=$(curl -s "http://127.0.0.1:$API_PORT/xymon/api/v1/client?format=env")
+assert_contains "XYMONAPI_URL=http://127.0.0.1:$API_PORT" "$env" "format=env gives the settings"
 assert_contains 'XYMONAPI_TOKEN_FILE=${XDG_CONFIG_HOME:-$HOME/.config}/xymon-api/xymon.token' "$env" "with the token file where the script keeps it"
 assert_not_contains "git clone" "$env" "and no script"
 
-# The script's own password path: the password goes to curl in a config on
-# its stdin, with " and \ escaped as curl wants, so one holding a space, a
+# The script's own password path: the user and password are read from the
+# terminal -- here stdin -- and the password goes to curl in a config on its
+# stdin, with " and \ escaped as curl wants, so one holding a space, a
 # quote, a backslash and a glob character reaches the API as it is, and is
 # on no command line. The script is run as a laptop would, up to its health
 # check and registration: git, make, claude and codex are stubs on PATH
-# (claude and codex record their arguments), the virtualenv is already there, and the password
-# file is written, so nothing is fetched, built, or asked.
+# (git, claude and codex record their arguments) and the virtualenv is
+# already there, so nothing is fetched or built.
 hard='pa ss"wo\rd*'
 htpasswd -bB "$work/htpasswd" carol "$hard" 2>/dev/null || fail "htpasswd could not add carol"
-curl -s -u "carol:$hard" "http://127.0.0.1:$API_PORT/xymon/api/v1/client" > "$work/carol.sh"
-grep -q '^USER=carol$' "$work/carol.sh" || fail "/client did not write carol: $(head -n 20 "$work/carol.sh")"
+curl -s "http://127.0.0.1:$API_PORT/xymon/api/v1/client" > "$work/carol.sh"
 lap=$work/lap
 mkdir -p "$work/stub" "$lap/src/.git" "$lap/prefix/libexec/xymonapi/venv/bin" "$lap/cfg/xymon-api"
-printf '#!/bin/sh\nexit 0\n' > "$work/stub/git"
-cp "$work/stub/git" "$work/stub/make"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/git.args"\n' "$lap" > "$work/stub/git"
+printf '#!/bin/sh\nexit 0\n' > "$work/stub/make"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/claude.args"\n' "$lap" > "$work/stub/claude"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/codex.args"\n' "$lap" > "$work/stub/codex"
 printf '#!/bin/sh\nexit 0\n' > "$lap/prefix/libexec/xymonapi/venv/bin/python3"
@@ -108,11 +122,12 @@ chmod 755 "$work/stub/git" "$work/stub/make" "$work/stub/claude" "$work/stub/cod
 # A password file an earlier version of the script kept: it must go.
 printf '%s\n' "$hard" > "$lap/cfg/xymon-api/xymon.password"
 rc=0
-# The password on stdin, as a person typing it gives it to read.
-out=$(cd "$lap" && printf '%s\n' "$hard" | HOME="$lap" XDG_CONFIG_HOME="$lap/cfg" XYMONAPI_SRC="$lap/src" PATH="$work/stub:$PATH" \
+# The user and password on stdin, as a person typing them gives them to read.
+out=$(cd "$lap" && printf 'carol\n%s\n' "$hard" | HOME="$lap" XDG_CONFIG_HOME="$lap/cfg" XYMONAPI_SRC="$lap/src" PATH="$work/stub:$PATH" \
 	sh "$work/carol.sh" "$lap/prefix" 2>&1) || rc=$?
 [ "$rc" -eq 0 ] || fail "the setup script failed with $rc: $out"
 assert_not_contains 'refused the password' "$out" "the API took carol's password from the script's curl"
+assert_contains "$(printf -- '--detach\n%s' "$commit")" "$(cat "$lap/git.args")" "the script installs the commit /health gave"
 assert_contains 'the API answers' "$out" "and the script read the answer (no xymond here, so alive is false)"
 tok=$lap/cfg/xymon-api/xymon.token
 assert_file_exists "$tok"
@@ -133,12 +148,13 @@ assert_contains "\"client\":\"${h%%.*}\"" "$(curl -s -u "carol:$hard" "http://12
 # nothing asked, in bash too: bash, out of POSIX mode, runs a trap and goes
 # back to the read, which then shows the password as it is typed. On a
 # terminal, which tests/lib/ctrl-c.py gives it; a new config directory, so
-# the script asks; the token kept above shows that none was issued for this
-# machine, since one would have replaced it.
+# the script asks; the user given in XYMONAPI_USER, so the password is the
+# first thing asked; the token kept above shows that none was issued for
+# this machine, since one would have replaced it.
 mkdir -p "$lap/cfg2"
 rc=0
 out=$(cd "$lap" && HOME="$lap" XDG_CONFIG_HOME="$lap/cfg2" XYMONAPI_SRC="$lap/src" PATH="$work/stub:$PATH" \
-	"${XYMONAPI_PYTHON:-python3}" "$ROOT/tests/lib/ctrl-c.py" 'password: ' bash "$work/carol.sh" "$lap/prefix" 2>&1) || rc=$?
+	XYMONAPI_USER=carol "${XYMONAPI_PYTHON:-python3}" "$ROOT/tests/lib/ctrl-c.py" 'password for carol: ' bash "$work/carol.sh" "$lap/prefix" 2>&1) || rc=$?
 assert_equal "130" "$rc" "Ctrl-C at the password prompt ends the script under bash ($out)"
 assert_contains "echo on" "$out" "with echo back on"
 [ -e "$lap/cfg2/xymon-api/xymon.token" ] && fail "a token was kept after Ctrl-C"

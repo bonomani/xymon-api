@@ -13,7 +13,8 @@
 # the test needs -- before calling start_api. start_api sets API_PORT and
 # API_PID; the caller stops API_PID in its cleanup.
 #
-# The API is started through xymonapi.sh, the launcher xymonlaunch runs.
+# The API is started through xymonapi.sh, the launcher xymonlaunch runs:
+# the checkout's, or an installed one's when API_ROOT names its directory.
 # It exits 77 when this machine lacks what the API needs (Python 3.10 and its
 # modules), and start_api then skips the test.
 
@@ -47,7 +48,7 @@ start_api() {
 		# The index /search reads: the test's own, never the one in this
 		# user's cache, which a developer's machine may well have.
 		XYMONAPI_LISTEN="127.0.0.1:$API_PORT" XYMONAPI_RAG_INDEX="${XYMONAPI_RAG_INDEX:-$work/no-index.npz}" \
-			"$ROOT/xymonapi.sh" > "$work/api.log" 2>&1 &
+			"${API_ROOT:-$ROOT}/xymonapi.sh" > "$work/api.log" 2>&1 &
 		API_PID=$!
 		deadline=$(( $(date +%s) + 60 ))
 		while [ "$(date +%s)" -lt "$deadline" ]; do

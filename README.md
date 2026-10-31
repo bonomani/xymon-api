@@ -95,7 +95,7 @@ later with its `venv` module, which Debian and Ubuntu package apart, as
 tools. Ask the API for its setup script, read it, run it:
 
 ```sh
-curl -u me https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
+curl https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
 sh xymon-setup.sh
 ```
 
@@ -107,13 +107,14 @@ certificate could be anyone's, and running it runs that code.
 ```sh
 mkdir -p ~/.config/xymon-api
 scp xymon.example.ch:/etc/xymon/tls/xymond.pem ~/.config/xymon-api/xymon-ca.pem
-curl --cacert ~/.config/xymon-api/xymon-ca.pem -u me \
+curl --cacert ~/.config/xymon-api/xymon-ca.pem \
   https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
 sh xymon-setup.sh
 ```
 
-It carries the API's address and your user name, and never the password.
-The address is `XYMONAPI_PUBLIC_URL` when the server sets it, else the one
+`/client` asks for no password, even where every other path does: the
+script carries the API's address and nothing secret -- no user, no
+password, not even the commit the server runs. The address is `XYMONAPI_PUBLIC_URL` when the server sets it, else the one
 the request came through, from its `Host` header, which the script says in
 its first lines: set `XYMONAPI_PUBLIC_URL` on any server other machines
 reach, so that the script carries the address you mean and not the one a
@@ -121,23 +122,25 @@ request happened to use.
 
 The script:
 
-1. clones this repository at the commit the server was installed from, so
-   both sides run the same code, and runs `make install-client`;
-2. makes a virtualenv with the `mcp` module;
-3. checks it reaches the API and trusts its certificate. When it does not,
+1. checks it reaches the API and trusts its certificate. When it does not,
    it stops there, before asking anything, and says where to put the
    certificate;
-4. asks for your password once, to get **this machine a token of its own**,
-   named by its short hostname, and keeps the token in
+2. asks for your user and password once, to get **this machine a token of
+   its own**, named by its short hostname, and keeps the token in
    `~/.config/xymon-api/xymon.token`, not the password;
+3. asks `/health`, with the token, for the commit the server was installed
+   from, clones this repository at that commit, so both sides run the same
+   code, and runs `make install-client`;
+4. makes a virtualenv with the `mcp` module;
 5. checks `/health` answers;
 6. registers the MCP server with Claude Code and with Codex, each when it is
    installed.
 
 The API's `/tokens` lists your machines and revokes one (`xymonapi.8`,
 TOKENS). Running the script again keeps a token that still works and
-replaces one that does not. `?name=xymon-lab` gives a second server its own
-name and token file; `?format=env` gives the two settings alone.
+replaces one that does not. `XYMONAPI_USER`, when set, is the user, not
+asked. `?name=xymon-lab` gives a second server its own name and token file;
+`?format=env` gives the two settings alone.
 
 By hand, `make install-client` from a clone puts `xymonapi-mcp` and
 `xymonapi-rag` in `$PREFIX/bin` (`~/.local` by default) and the code under
@@ -156,7 +159,7 @@ manual page named.
 | setting | meaning | default |
 |---|---|---|
 | `XYMONAPI_LISTEN` | where the API listens, HOST:PORT | `127.0.0.1:1986` |
-| `XYMONAPI_PASSWD` | an htpasswd file; every request needs a user from it; empty for none | Xymon's `etc/xymonpasswd` when it exists |
+| `XYMONAPI_PASSWD` | an htpasswd file; every request but `/client` needs a user from it, or a token; empty for none | Xymon's `etc/xymonpasswd` when it exists |
 | `XYMONAPI_TLS_CERT`, `_KEY` | a certificate and key; with them the API speaks HTTPS | xymond's `etc/tls/xymond.pem` and `.key` when they exist |
 | `XYMONAPI_PUBLIC_URL` | the address `/client` writes; set it on a server other machines reach | the address the request came through |
 | `XYMONAPI_TOKENS` | the file of client tokens' SHA-256s | `$XYMONVAR/xymonapi/tokens` |
@@ -366,7 +369,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through, and its script gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, and registers the MCP server with it, in Claude Code and Codex; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again; without `make` it says so before starting |
+| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` is open and writes the address the request came through, and no user or commit; `/health` gives the commit to a user; the script asks for the user, gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, installs the commit `/health` gave, and registers the MCP server with the token, in Claude Code and Codex; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again; without `make` it says so before starting |
 | `xymonapi-tokens` | a token per user and machine opens the API, replaces the last, is revoked on its own, cannot make, list or revoke tokens, is stored as its SHA-256 only, and lets the MCP client in |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled; `XYMONAPI_HIDE` blanks secrets, and a bad expression stops the API |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |

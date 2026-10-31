@@ -47,25 +47,26 @@ assert_equal "000" "$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' "http:
 assert_contains "URL=https://127.0.0.1:$API_PORT" "$(api_get /client)" "/client writes an https:// address"
 assert_contains "CAFILE=" "$(api_get /client)" "and knows where a certificate to trust would go"
 
-# The setup script, for a user, with no certificate to trust: it says what
-# to do -- copy the certificate to CAFILE -- before asking for a password,
-# which would go nowhere. git and make are stubs, and the virtualenv is
-# there, so nothing is fetched or built; the user is written in, since
-# this API asks for none.
+# The setup script, with no certificate to trust: it says what to do --
+# copy the certificate to CAFILE -- and stops, asking nothing. Its first
+# request is to /health, and only a 401 there makes it ask for a user and
+# password, so a certificate it does not trust is said first; this API asks
+# for no password, and the test pins the message. git and make are stubs,
+# and the virtualenv is there, so nothing is fetched or built.
 lap=$work/lap
 mkdir -p "$work/stub" "$lap/src/.git" "$lap/prefix/libexec/xymonapi/venv/bin" "$lap/cfg"
 printf '#!/bin/sh\nexit 0\n' > "$work/stub/git"
 cp "$work/stub/git" "$work/stub/make"
 cp "$work/stub/git" "$lap/prefix/libexec/xymonapi/venv/bin/python3"
 chmod 755 "$work/stub/git" "$work/stub/make" "$lap/prefix/libexec/xymonapi/venv/bin/python3"
-api_get /client | sed "s/^USER=''$/USER=carol/" > "$work/setup.sh"
-grep -q '^USER=carol$' "$work/setup.sh" || fail "no USER= line to fill in /client's script"
+api_get /client > "$work/setup.sh"
 rc=0
 out=$(cd "$lap" && printf 'secret\n' | HOME="$lap" XDG_CONFIG_HOME="$lap/cfg" XYMONAPI_SRC="$lap/src" PATH="$work/stub:$PATH" \
 	sh "$work/setup.sh" "$lap/prefix" 2>&1) || rc=$?
 [ "$rc" -ne 0 ] || fail "the setup script went on with a certificate it does not trust: $out"
 assert_contains "copy the server's certificate" "$out" "the setup script says what to do with an unknown certificate"
-assert_not_contains "your password" "$out" "before it asks for a password"
+assert_not_contains "password" "$out" "before it asks for a password"
+assert_not_contains "user:" "$out" "or a user"
 
 # The MCP client: refused without the CA, let in with it.
 mcp "https://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true
