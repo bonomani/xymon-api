@@ -22,9 +22,10 @@ specification: every operation, every setting, and how to enable it. The
 OpenAPI description is [`openapi.yaml`](openapi.yaml), also served by the
 API at `/openapi.json`.
 
-Two more pieces run where you are, not on the server: an [MCP server](#mcp-server)
-that gives Claude the same operations as tools, and a [search](#search)
-command line. A laptop needs only those, installed with `make install-client`.
+Two more pieces run where you are, not on the server: an
+[MCP server](#mcp-server) that gives an AI client -- Claude, Codex and
+others -- the same operations as tools, and a [search](#search) command
+line. A laptop needs only those, installed with `make install-client`.
 
 ## Requirements
 
@@ -88,9 +89,10 @@ curl http://127.0.0.1:1986/xymon/api/v1/health
 
 ### On a laptop
 
-Nothing of the above: `git`, `curl`, and Python 3.10 or later with its
-`venv` module, which Debian and Ubuntu package apart, as `python3-venv`.
-Ask the API for its setup script, read it, run it:
+None of the above. A laptop needs `git`, `make`, `curl`, and Python 3.10 or
+later with its `venv` module, which Debian and Ubuntu package apart, as
+`python3-venv`; on a Mac, `git` and `make` come with the Xcode command-line
+tools. Ask the API for its setup script, read it, run it:
 
 ```sh
 curl -u me https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
@@ -116,19 +118,26 @@ the request came through, from its `Host` header, which the script says in
 its first lines: set `XYMONAPI_PUBLIC_URL` on any server other machines
 reach, so that the script carries the address you mean and not the one a
 request happened to use.
-It clones this repository at the commit the server was installed from, so
-both sides run the same code, runs `make install-client`, makes a virtualenv
-with the `mcp` module, checks it reaches the API and trusts its certificate
--- and stops, saying where to put the certificate, before asking for anything
-when it does not -- asks for your password once to get **this machine a
-token of its own**, named by its short hostname, keeps the token in
-`~/.config/xymon-api/xymon.token` and not the password, checks `/health`
-answers, and registers the MCP server with Claude Code and Codex, each when
-it is installed. The API's `/tokens`
-lists your machines and revokes one (`xymonapi.8`, TOKENS); running the
-script again keeps a token that still works and replaces one that does
-not. `?name=xymon-lab` gives a second server its own name and token file;
-`?format=env` gives the two settings alone.
+
+The script:
+
+1. clones this repository at the commit the server was installed from, so
+   both sides run the same code, and runs `make install-client`;
+2. makes a virtualenv with the `mcp` module;
+3. checks it reaches the API and trusts its certificate. When it does not,
+   it stops there, before asking anything, and says where to put the
+   certificate;
+4. asks for your password once, to get **this machine a token of its own**,
+   named by its short hostname, and keeps the token in
+   `~/.config/xymon-api/xymon.token`, not the password;
+5. checks `/health` answers;
+6. registers the MCP server with Claude Code and with Codex, each when it is
+   installed.
+
+The API's `/tokens` lists your machines and revokes one (`xymonapi.8`,
+TOKENS). Running the script again keeps a token that still works and
+replaces one that does not. `?name=xymon-lab` gives a second server its own
+name and token file; `?format=env` gives the two settings alone.
 
 By hand, `make install-client` from a clone puts `xymonapi-mcp` and
 `xymonapi-rag` in `$PREFIX/bin` (`~/.local` by default) and the code under
@@ -141,7 +150,7 @@ must be reachable from the laptop first: see
 
 All of them are environment variables. The API's go in a file under
 `xymonserver.d/`; the client's and the search's go there too for the index
-task, and in the MCP registration for Claude. Every one is described in the
+task, and in the MCP client's registration. Every one is described in the
 manual page named.
 
 | setting | meaning | default |
@@ -232,7 +241,7 @@ else. For Claude Code, once, at user scope so every project has it:
 claude mcp add --scope user xymon \
   -e XYMONAPI_URL=https://xymon.example.ch \
   -e XYMONAPI_TOKEN_FILE=$HOME/.config/xymon-api/xymon.token \
-  -e XYMONAPI_PYTHON=/path/to/python3.12 \
+  -e XYMONAPI_PYTHON=$HOME/.local/libexec/xymonapi/venv/bin/python3 \
   -- ~/.local/bin/xymonapi-mcp
 ```
 
@@ -242,7 +251,7 @@ For Codex, the same, with `--env` for `-e` and no scope:
 codex mcp add xymon \
   --env XYMONAPI_URL=https://xymon.example.ch \
   --env XYMONAPI_TOKEN_FILE=$HOME/.config/xymon-api/xymon.token \
-  --env XYMONAPI_PYTHON=/path/to/python3.12 \
+  --env XYMONAPI_PYTHON=$HOME/.local/libexec/xymonapi/venv/bin/python3 \
   -- ~/.local/bin/xymonapi-mcp
 ```
 
@@ -269,8 +278,9 @@ out in full:
 }
 ```
 
-opencode reads its own form, in `opencode.json`: the command as a list, and
-`environment` for `env`:
+opencode reads its own form, in `~/.config/opencode/opencode.json`, or an
+`opencode.json` in a project: the command as a list, and `environment` for
+`env`:
 
 ```json
 {
@@ -335,8 +345,8 @@ xymonapi-rag ask "has /boot filled up before, and where?"
 passages to a language model speaking the OpenAI-compatible API, a local
 Ollama by default, LM Studio with two settings. Pick the model with care: a
 small one such as `llama3.2` answers in a second but makes options up, where
-a larger one says when the passages do not hold the answer. With Claude, the
-MCP tools are the simpler way. `eval` scores the search against a file of
+a larger one says when the passages do not hold the answer. With an MCP
+client, its tools are the simpler way. `eval` scores the search against a file of
 questions; [`tests/eval/docs.json`](tests/eval/docs.json) is the one CI
 runs. Every command and setting is in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
 
