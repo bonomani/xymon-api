@@ -247,9 +247,34 @@ codex mcp add xymon \
 ```
 
 Those are the registrations the [setup script](#on-a-laptop) makes. Any
-other MCP client takes the same command and settings. By hand,
-the token is what a POST to `/tokens` with your password answers
-(`xymonapi.8`, TOKENS), written alone in that file, mode 600.
+other client that starts an MCP server over stdio takes the same command and
+settings, most of them as this JSON: Claude Desktop in
+`claude_desktop_config.json`, Gemini CLI in `~/.gemini/settings.json`,
+Cursor in `~/.cursor/mcp.json`; VS Code reads `.vscode/mcp.json`, with
+`servers` for `mcpServers`. JSON expands nothing, so the paths are written
+out in full:
+
+```json
+{
+  "mcpServers": {
+    "xymon": {
+      "command": "/home/me/.local/bin/xymonapi-mcp",
+      "env": {
+        "XYMONAPI_URL": "https://xymon.example.ch",
+        "XYMONAPI_TOKEN_FILE": "/home/me/.config/xymon-api/xymon.token",
+        "XYMONAPI_PYTHON": "/home/me/.local/libexec/xymonapi/venv/bin/python3"
+      }
+    }
+  }
+}
+```
+
+A client in a web browser -- claude.ai, ChatGPT -- reaches only an MCP
+server over HTTP, and this one speaks stdio alone: it cannot use it.
+
+The token file holds what a POST to `/tokens` with your password answers
+(`xymonapi.8`, TOKENS), alone, mode 600. The setup script writes it; without
+the script, write it by hand.
 `XYMONAPI_USER` and `XYMONAPI_PASSWORD_FILE` still work instead, but keep a
 password on the machine. Leave out the token file when the API asks for no
 password, and `XYMONAPI_PYTHON` when the system `python3` has the module.
