@@ -189,9 +189,10 @@ server. It listens on 127.0.0.1 unless told otherwise. From another
 machine, use HTTPS, one of:
 
 - **The API's own HTTPS.** Where the server has TLS for the Xymon protocol
-  (`xymon-tls(7)`, from Xymon pull requests #617–#623, not yet merged), the API finds xymond's certificate and
-  key in `etc/tls/` and speaks HTTPS on 1986 by itself; or name any
-  certificate and key in `XYMONAPI_TLS_CERT` and `_KEY`. Open the port
+  (`xymon-tls(7)`, from Xymon pull requests #617–#623, not yet merged), the
+  API finds xymond's certificate and key in `etc/tls/` and speaks HTTPS on
+  1986 by itself; or name any certificate and key in `XYMONAPI_TLS_CERT` and
+  `_KEY`. Open the port
   (`XYMONAPI_LISTEN="0.0.0.0:1986"`), then `XYMONAPI_URL=https://server:1986`
   on the laptop, with `XYMONAPI_CA` naming that certificate when it is
   self-signed. No web server in the path.
@@ -346,9 +347,10 @@ passages to a language model speaking the OpenAI-compatible API, a local
 Ollama by default, LM Studio with two settings. Pick the model with care: a
 small one such as `llama3.2` answers in a second but makes options up, where
 a larger one says when the passages do not hold the answer. With an MCP
-client, its tools are the simpler way. `eval` scores the search against a file of
-questions; [`tests/eval/docs.json`](tests/eval/docs.json) is the one CI
-runs. Every command and setting is in [`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
+client, its tools are the simpler way. `eval` scores the search against a
+file of questions; [`tests/eval/docs.json`](tests/eval/docs.json) is the one
+CI runs. Every command and setting is in
+[`rag/xymonapi-rag.1`](rag/xymonapi-rag.1).
 
 ## Tests
 
@@ -377,9 +379,9 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 | `xymonapi-tls` | with xymond's certificate the API speaks HTTPS, `/client` says so and its script names the certificate file before asking for a password, the MCP client trusts `XYMONAPI_CA`, a readable key refuses to start |
 
 They need `bash`, `curl`, and the Python modules of all three
-`requirements.txt` -- the API's, `mcp-server/`'s and `rag/`'s -- for `python3`,
-or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool`, `openssl` or Apache's
-`htpasswd`. The web server and the language model are stand-ins under
+`requirements.txt` -- the API's, `mcp-server/`'s and `rag/`'s -- for
+`python3`, or the Python `XYMONAPI_PYTHON` names; some also need `rrdtool`,
+`openssl` or Apache's `htpasswd`. The web server and the language model are stand-ins under
 `tests/lib/`; the embedding model is the real one, downloaded once, about
 65 MB. A test skips (exit 77) when something it needs is missing, and says
 what. The whole run takes three to four minutes, most of it the search
