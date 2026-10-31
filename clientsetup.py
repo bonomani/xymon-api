@@ -32,7 +32,8 @@ SCRIPT = """#!/bin/sh
 # Read it, then run it. It installs under PREFIX (~/.local by default),
 # asks for your password once to get this machine a token of its own --
 # the password is not kept -- checks the API answers, and registers the MCP
-# server with Claude Code under the name {name} when claude is here.
+# server with Claude Code and Codex under the name {name}, each when it is
+# here.
 #
 #   sh {script} [PREFIX]
 #
@@ -188,6 +189,16 @@ else
 	[ -n "$USER" ] && echo "    -e XYMONAPI_TOKEN_FILE=$TOKENFILE \\\\"
 	[ -n "$ca" ] && echo "    -e XYMONAPI_CA=$CAFILE \\\\"
 	echo "    -e XYMONAPI_PYTHON=$VENV/bin/python3 -- $PREFIX/bin/xymonapi-mcp"
+fi
+
+# Codex speaks MCP too, and takes the same server and settings.
+if command -v codex >/dev/null 2>&1; then
+	say "registering the MCP server with Codex as $NAME"
+	codex mcp remove "$NAME" >/dev/null 2>&1 || true
+	set -- "$NAME" --env XYMONAPI_URL="$URL"
+	[ -n "$USER" ] && set -- "$@" --env XYMONAPI_TOKEN_FILE="$TOKENFILE"
+	[ -n "$ca" ] && set -- "$@" --env XYMONAPI_CA="$CAFILE"
+	codex mcp add "$@" --env XYMONAPI_PYTHON="$VENV/bin/python3" -- "$PREFIX/bin/xymonapi-mcp"
 fi
 
 say "done"

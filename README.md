@@ -123,7 +123,8 @@ with the `mcp` module, checks it reaches the API and trusts its certificate
 when it does not -- asks for your password once to get **this machine a
 token of its own**, named by its short hostname, keeps the token in
 `~/.config/xymon-api/xymon.token` and not the password, checks `/health`
-answers, and registers the MCP server with Claude Code. The API's `/tokens`
+answers, and registers the MCP server with Claude Code and Codex, each when
+it is installed. The API's `/tokens`
 lists your machines and revokes one (`xymonapi.8`, TOKENS); running the
 script again keeps a token that still works and replaces one that does
 not. `?name=xymon-lab` gives a second server its own name and token file;
@@ -219,7 +220,7 @@ which setting to look at first.
 ## MCP server
 
 [`mcp-server/`](mcp-server) gives an AI client that speaks the Model Context
-Protocol -- Claude Desktop, Claude Code -- read-only tools over the API:
+Protocol -- Claude Desktop, Claude Code, Codex -- read-only tools over the API:
 `health`, `states`, `alarms`, `entities`, `status`, `series`, and the two
 searches of the next section, `search_docs` and `search_history`, which ask
 the API's `/search`. It runs where the client runs, from this checkout or
@@ -235,7 +236,18 @@ claude mcp add --scope user xymon \
   -- ~/.local/bin/xymonapi-mcp
 ```
 
-That is the registration the [setup script](#on-a-laptop) makes. By hand,
+For Codex, the same, with `--env` for `-e` and no scope:
+
+```sh
+codex mcp add xymon \
+  --env XYMONAPI_URL=https://xymon.example.ch \
+  --env XYMONAPI_TOKEN_FILE=$HOME/.config/xymon-api/xymon.token \
+  --env XYMONAPI_PYTHON=/path/to/python3.12 \
+  -- ~/.local/bin/xymonapi-mcp
+```
+
+Those are the registrations the [setup script](#on-a-laptop) makes. Any
+other MCP client takes the same command and settings. By hand,
 the token is what a POST to `/tokens` with your password answers
 (`xymonapi.8`, TOKENS), written alone in that file, mode 600.
 `XYMONAPI_USER` and `XYMONAPI_PASSWORD_FILE` still work instead, but keep a
@@ -297,7 +309,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through, and its script gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, and registers the MCP server with it; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again |
+| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through, and its script gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, and registers the MCP server with it, in Claude Code and Codex; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again |
 | `xymonapi-tokens` | a token per user and machine opens the API, replaces the last, is revoked on its own, cannot make, list or revoke tokens, is stored as its SHA-256 only, and lets the MCP client in |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled; `XYMONAPI_HIDE` blanks secrets, and a bad expression stops the API |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |

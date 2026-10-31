@@ -90,8 +90,8 @@ assert_not_contains "git clone" "$env" "and no script"
 # its stdin, with " and \ escaped as curl wants, so one holding a space, a
 # quote, a backslash and a glob character reaches the API as it is, and is
 # on no command line. The script is run as a laptop would, up to its health
-# check and registration: git, make and claude are stubs on PATH (claude
-# records its arguments), the virtualenv is already there, and the password
+# check and registration: git, make, claude and codex are stubs on PATH
+# (claude and codex record their arguments), the virtualenv is already there, and the password
 # file is written, so nothing is fetched, built, or asked.
 hard='pa ss"wo\rd*'
 htpasswd -bB "$work/htpasswd" carol "$hard" 2>/dev/null || fail "htpasswd could not add carol"
@@ -102,8 +102,9 @@ mkdir -p "$work/stub" "$lap/src/.git" "$lap/prefix/libexec/xymonapi/venv/bin" "$
 printf '#!/bin/sh\nexit 0\n' > "$work/stub/git"
 cp "$work/stub/git" "$work/stub/make"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/claude.args"\n' "$lap" > "$work/stub/claude"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/codex.args"\n' "$lap" > "$work/stub/codex"
 printf '#!/bin/sh\nexit 0\n' > "$lap/prefix/libexec/xymonapi/venv/bin/python3"
-chmod 755 "$work/stub/git" "$work/stub/make" "$work/stub/claude" "$lap/prefix/libexec/xymonapi/venv/bin/python3"
+chmod 755 "$work/stub/git" "$work/stub/make" "$work/stub/claude" "$work/stub/codex" "$lap/prefix/libexec/xymonapi/venv/bin/python3"
 # A password file an earlier version of the script kept: it must go.
 printf '%s\n' "$hard" > "$lap/cfg/xymon-api/xymon.password"
 rc=0
@@ -121,6 +122,9 @@ assert_equal "-rw-------" "$(ls -l "$tok" | cut -c1-10)" "readable by this user 
 assert_not_contains "$hard" "$(cat "$tok")" "the token is not the password"
 assert_contains "XYMONAPI_TOKEN_FILE=$tok" "$(cat "$lap/claude.args")" "the MCP registration names the token file"
 assert_not_contains 'PASSWORD' "$(cat "$lap/claude.args")" "and no password setting"
+assert_contains "XYMONAPI_TOKEN_FILE=$tok" "$(cat "$lap/codex.args")" "Codex is registered too, with the token file"
+assert_contains "$lap/prefix/bin/xymonapi-mcp" "$(cat "$lap/codex.args")" "and the MCP server"
+assert_not_contains 'PASSWORD' "$(cat "$lap/codex.args")" "and no password setting"
 # Named by the short hostname, as the API lists it.
 h=$(hostname 2>/dev/null || uname -n)
 assert_contains "\"client\":\"${h%%.*}\"" "$(curl -s -u "carol:$hard" "http://127.0.0.1:$API_PORT/xymon/api/v1/tokens")" "the token is for this machine's short name"
