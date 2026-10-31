@@ -15,10 +15,14 @@ xymonapi-rag finds the passages of Xymon's manual pages, and of its history,
 that a question is about, by what they mean rather than by the words they
 share.
 .IP "\fBindex\fR"
-Reads the manual pages under $XYMONAPI_RAG_DOCS and, through
-.I xymonapi(8),
-the colour changes since $XYMONAPI_RAG_SINCE with the status text saved at
-each -- page by page, the newest $XYMONAPI_RAG_MAX_HISTORY of them at most;
+Reads the manual pages under $XYMONAPI_RAG_DOCS and the colour changes
+since $XYMONAPI_RAG_SINCE with the status text saved at each -- the newest
+$XYMONAPI_RAG_MAX_HISTORY of them at most. On the Xymon server, where
+$XYMONHISTDIR is set, the changes are read from xymond's own files, as
+.I xymonapi(8)
+reads them and with the same $XYMONAPI_HIDE: no API, user or token is
+needed. Anywhere else they are read through the API, page by page, with the
+token or user below. It
 cuts them into passages, one per manual-page
 section or item and one per change; and stores a vector for each in
 $XYMONAPI_RAG_INDEX. A passage the index holds already keeps its vector, and
@@ -28,13 +32,11 @@ to take in what has changed: the task \fBtasks.d/xymonapi-rag\fR, which
 make install writes DISABLED, does so once a day, and
 .I xymonapi(8)
 reads the new index at once. To run it, remove that line and put
-XYMONAPI_RAG_DOCS -- and XYMONAPI_USER and XYMONAPI_PASSWORD when the API
-asks for them -- in a file under xymonserver.d/ that only the Xymon user
-can read. When
-the history cannot be read -- a /histlog refused for another reason than a
-status that was not saved -- it stops and leaves the index as it was. An
-API that does not answer yet, as at start-up when the task runs before
-xymonapi listens, is tried again for about a minute first.
+XYMONAPI_RAG_DOCS in a file under xymonserver.d/. When
+the history cannot be read -- a saved status refused for another reason than
+one that was not saved -- it stops and leaves the index as it was. Through
+the API, one that does not answer yet, as when both are started by the same
+boot, is tried again for about a minute first.
 \fB--no-history\fR reads the manual pages only.
 .IP "\fBsearch\fR"
 Prints, as JSON, the N passages nearest QUESTION (5 by default, 20 at most),
@@ -123,11 +125,11 @@ tokens, and may spend them all on it: ask then says so. A plain model, such
 as llama3.2, is the better fit.
 .IP "\fBXYMONAPI_URL\fR, \fBXYMONAPI_TOKEN_FILE\fR, \fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR, \fBXYMONAPI_PASSWORD_FILE\fR"
 Where the API is, and the token, or the user, to send it, as for
-xymonapi-mcp(1). As an
-xymonlaunch task, index reads these from a file under xymonserver.d/,
-which every Xymon program and CGI loads: put the password in a file of its
-own that the Xymon user alone can read, and name it in
-XYMONAPI_PASSWORD_FILE, so that the environment holds only its name.
+xymonapi-mcp(1): for search and ask where there is no index here, and for
+index off the Xymon server. On the server, index reads the history from
+xymond's files and sends nothing. Prefer the token; a password goes in a
+file of its own that only you can read, named in XYMONAPI_PASSWORD_FILE, so
+that the environment holds only its name.
 .IP "\fBXYMONAPI_PYTHON\fR"
 The Python to run with. The default is python3, found on PATH.
 

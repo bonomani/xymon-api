@@ -57,7 +57,7 @@ It writes into the Xymon server directory, so it is normally run as root.
 | `$XYMONHOME/ext/xymonapi/app.py`, `xymon.py`, `clientsetup.py`, `tokens.py`, `openapi.yaml`, `requirements.txt` | the files of the same name |
 | `$XYMONHOME/ext/xymonapi/xymonapi.sh`, the launcher | `xymonapi.sh` |
 | `$XYMONHOME/etc/tasks.d/xymonapi`, the task, written `DISABLED` | `xymonapi.tasks.DIST`, with `@XYMONHOME@` replaced |
-| `$XYMONHOME/ext/xymonapi/rag/`, the search and its launcher, and `mcp-server/client.py` it reads the API with | `rag/xymonrag.py`, `xymonapi-rag.sh`, `requirements.txt`, `mcp-server/client.py` |
+| `$XYMONHOME/ext/xymonapi/rag/`, the search and its launcher, and `mcp-server/client.py`, which a search with no index here asks the API with | `rag/xymonrag.py`, `xymonapi-rag.sh`, `requirements.txt`, `mcp-server/client.py` |
 | `$XYMONHOME/etc/tasks.d/xymonapi-rag`, the daily index task, written `DISABLED` | `rag/xymonapi-rag.tasks.DIST` |
 | `$XYMONHOME/etc/xymonapi-{apache,nginx,lighttpd}.conf`, the web server snippets, written once | the files of the same name |
 | `$MANDIR/man8/xymonapi.8`, `$MANDIR/man1/xymonapi-rag.1` | the pages of the same name |
@@ -327,8 +327,9 @@ are: `make install` writes a daily xymonlaunch task, `tasks.d/xymonapi-rag`,
 DISABLED. To enable it, remove the line, install the modules in
 [`rag/requirements.txt`](rag/requirements.txt) for the Xymon user, and put
 `XYMONAPI_RAG_DOCS` (a directory with Xymon's manual pages, `/usr/share/man`
-will do) and, when the API asks for a password, `XYMONAPI_USER` and
-`XYMONAPI_PASSWORD_FILE` in a file under `xymonserver.d/`. The first run
+will do) in a file under `xymonserver.d/`. The task reads the history from
+xymond's own files, as the API does: it needs no user, password or token,
+whatever the API asks of its clients. The first run
 downloads a 65 MB embedding model, which `XYMONAPI_RAG_OFFLINE` can forbid
 once the cache is seeded, and takes about a minute; the next ones embed only
 what is new and take seconds. The index holds the last 30 days of history,
@@ -373,9 +374,9 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 | `xymonapi-graphs` | `/graphs` reaches `showgraph.sh` through `XYMONWEBHOST` when `XYMONSERVERCGIURL` is a path |
 | `xymonapi-install` | `make install` lays out the files, the web server snippets included, keeps what the admin edited; `make install-client` lays out the laptop side |
 | `xymonapi-mcp` | the MCP server's eight tools answer with the API's board, are read-only, tell the model a status text is data, and say what to check when the API is out of reach |
-| `xymonapi-rag` | the search finds the right manual page and history passage, from the index here or the API's; `/search` and `/health` serve the index and see it change; `index` embeds only what is new; `eval` scores; `ask` reaches a language model |
+| `xymonapi-rag` | the search finds the right manual page and history passage, from the index here or the API's; on the server `index` reads the history from xymond's files with no credential, `XYMONAPI_HIDE` applied, and elsewhere through the API; `/search` and `/health` serve the index and see it change; `index` embeds only what is new; `eval` scores; `ask` reaches a language model |
 | `xymonapi-rag-eval` | ten questions about Xymon's own manual pages, all of them, score at least 8 |
-| `xymonapi-rag-startup` | `index` waits for an API that is not up yet, and not for one that refuses it |
+| `xymonapi-rag-startup` | off the server, `index` waits for an API that is not up yet, and not for one that refuses it |
 | `xymonapi-tls` | with xymond's certificate the API speaks HTTPS, `/client` says so and its script names the certificate file before asking for a password, the MCP client trusts `XYMONAPI_CA`, a readable key refuses to start |
 
 They need `bash`, `curl`, and the Python modules of all three

@@ -3,11 +3,13 @@
 #
 # tests/api/xymonapi-rag-startup.sh
 #
-# As an xymonlaunch task, xymonapi-rag index can start seconds before the
-# API listens: at boot, both are started together. An API that gives no
-# answer at all is tried again for about a minute, so the index is built
-# once it is up. An API that answers -- here a 401, for a password it was
-# not given -- is not retried: that failure is reported at once.
+# Off the Xymon server -- no XYMONHISTDIR, so the history comes through the
+# API -- xymonapi-rag index can start before the API listens, as when both
+# are started by the same boot. An API that gives no answer at all is tried
+# again for about a minute, so the index is built once it is up. An API that
+# answers -- here a 401, for a password it was not given -- is not retried:
+# that failure is reported at once. (On the server, index reads xymond's
+# files and does not need the API at all: xymonapi-rag.sh covers that.)
 #
 # The pages are one small real one from the Xymon tree in XYMON_SRC, so the
 # embedding is quick; the history is written here in xymond_history's
@@ -32,9 +34,12 @@ printf 'web.example.com http 1699400000 1699300000 100000 re gr 0\n' > "$work/hi
 printf 'red Tue Nov  7 23:33:20 2023 HTTP 500 from https://web.example.com/login\n' \
 	> "$work/histlogs/web_example_com/http/Tue_Nov_7_23:33:20_2023"
 
-export TZ=UTC XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:1" \
-	XYMONHISTDIR="$work/hist" XYMONHISTLOGS="$work/histlogs"
-unset XYMONAPI_RAG_MODEL
+# The history's place is the API's to know, not the indexer's: with
+# XYMONHISTDIR in its environment, index would read the files and never
+# wait for the API.
+export TZ=UTC XYMON="$XYMONCLIENT" XYMSRV="127.0.0.1:1"
+HIST="XYMONHISTDIR=$work/hist XYMONHISTLOGS=$work/histlogs"
+unset XYMONAPI_RAG_MODEL XYMONHISTDIR XYMONHISTLOGS
 export XYMONAPI_RAG_DOCS="$work/docs" XYMONAPI_RAG_INDEX="$work/index.npz" \
 	XYMONAPI_RAG_SINCE=1699000000
 
@@ -52,7 +57,7 @@ export XYMONAPI_URL="http://127.0.0.1:$API_PORT"
 RAG_PID=$!
 sleep 12
 kill -0 "$RAG_PID" 2>/dev/null || fail "index gave up within 12 seconds of an API that was not up yet: $(tail -n 3 "$work/rag.err")"
-XYMONAPI_LISTEN="127.0.0.1:$API_PORT" "$ROOT/xymonapi.sh" > "$work/api.log" 2>&1 &
+env $HIST XYMONAPI_LISTEN="127.0.0.1:$API_PORT" "$ROOT/xymonapi.sh" > "$work/api.log" 2>&1 &
 API_PID=$!
 deadline=$(( $(date +%s) + 60 ))
 until curl -s --max-time 5 -o /dev/null "$XYMONAPI_URL/xymon/api/v1/health"; do
@@ -74,7 +79,7 @@ assert_contains 'web.example.com http' \
 command -v htpasswd >/dev/null 2>&1 || { pass_partial "index waits for an API that is not up yet (the 401 part needs htpasswd)"; }
 htpasswd -cbB "$work/passwd" alice secret > /dev/null 2>&1 || fail "htpasswd could not write $work/passwd"
 stop_process "$API_PID"; API_PID=""
-XYMONAPI_PASSWD="$work/passwd" start_api
+XYMONHISTDIR="$work/hist" XYMONHISTLOGS="$work/histlogs" XYMONAPI_PASSWD="$work/passwd" start_api
 export XYMONAPI_URL="http://127.0.0.1:$API_PORT"
 unset XYMONAPI_USER XYMONAPI_PASSWORD
 began=$(date +%s)

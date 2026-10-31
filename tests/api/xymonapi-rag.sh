@@ -3,9 +3,11 @@
 #
 # tests/api/xymonapi-rag.sh
 #
-# xymonapi-rag indexes Xymon's own manual pages and, through the API, the
-# history of colour changes with the status text saved at each, and finds the
-# passage a question is about: how long a problem must last before an alert
+# xymonapi-rag indexes Xymon's own manual pages and the history of colour
+# changes with the status text saved at each -- from xymond's files where
+# XYMONHISTDIR names them, as the task on the server has it, with no API, user
+# or token, and through the API elsewhere -- and finds the passage a question
+# is about: how long a problem must last before an alert
 # is sent is in alerts.cfg(5) under RULES, a full disk is in analysis.cfg(5),
 # and an HTTP 500 on the login page is the red http change of web.example.com.
 # Only Xymon's pages are indexed, and .TP items are read whether the item is a
@@ -248,17 +250,53 @@ assert_not_contains 'web.example.com' "$(XYMONAPI_RAG_INDEX="$work/index4.npz" r
 # Names a digit apart embed much the same, so any of the newest fifty will do.
 assert_match 'many1(0[5-9][0-9]|100)\.example\.com conn' "$(XYMONAPI_RAG_INDEX="$work/index4.npz" rag search -k 1 --kind history 'many1100.example.com conn red')" "and the newest kept"
 
-# A /histlog that fails for another reason than a missing file -- here an
-# API without XYMONHISTLOGS, which answers 502 -- must fail the indexing, not
-# build an index without the texts.
+# A saved status that fails to be read for another reason than a missing
+# file -- here no XYMONHISTLOGS, which the API answers with 502 -- must fail
+# the indexing, not build an index without the texts: from the files, and
+# through the API.
+rc=0
+XYMONHISTLOGS="" XYMONAPI_RAG_INDEX="$work/index2.npz" rag index > /dev/null || rc=$?
+[ "$rc" -ne 0 ] || fail "indexing from the files succeeded with no XYMONHISTLOGS"
+assert_contains 'cannot read the history' "$(cat "$work/rag.err")" "and says why"
 stop_process "$API_PID"
 API_PID=""
 XYMONHISTLOGS="" start_api
 export XYMONAPI_URL="http://127.0.0.1:$API_PORT"
 rc=0
-XYMONAPI_RAG_INDEX="$work/index2.npz" rag index > /dev/null || rc=$?
+XYMONHISTDIR="" XYMONAPI_RAG_INDEX="$work/index2.npz" rag index > /dev/null || rc=$?
 [ "$rc" -ne 0 ] || fail "indexing succeeded while every /histlog answered 502"
 assert_contains 'cannot read the history' "$(cat "$work/rag.err")" "and says why"
 [ -e "$work/index2.npz" ] && fail "a failed indexing left an index behind"
 
-pass "xymonapi-rag finds the manual-page passage and the history a question is about, the API and the MCP tool serve the same index, index keeps what it has, and ask hands the passages to a language model"
+# On the server the task needs no credential: with XYMONHISTDIR set, as
+# xymonserver.cfg sets it, index reads xymond's files and never asks the API,
+# which here takes a password nobody gives it. Off the server, without
+# XYMONHISTDIR, the same run is the API's 401; with a user and password it
+# reads the history through the API. XYMONAPI_HIDE applies to both.
+if command -v htpasswd >/dev/null 2>&1; then
+	htpasswd -cbB "$work/passwd" alice secret > /dev/null 2>&1 || fail "htpasswd could not write $work/passwd"
+	echo 'Internal Server Error' > "$work/hide"
+	stop_process "$API_PID"
+	API_PID=""
+	XYMONAPI_PASSWD="$work/passwd" XYMONAPI_HIDE="$work/hide" start_api
+	export XYMONAPI_URL="http://127.0.0.1:$API_PORT"
+	unset XYMONAPI_USER XYMONAPI_PASSWORD XYMONAPI_TOKEN XYMONAPI_TOKEN_FILE
+	XYMONAPI_HIDE="$work/hide" XYMONAPI_RAG_INDEX="$work/index5.npz" rag index > "$work/index5.out" \
+		|| fail "index on the server, with the API asking for a password, failed: $(tail -n 5 "$work/rag.err")"
+	assert_match 'indexed [0-9]+ passages' "$(cat "$work/index5.out")" "on the server, index reads the files and needs no user or token"
+	hist=$(XYMONAPI_RAG_INDEX="$work/index5.npz" rag search -k 1 --kind history 'HTTP 500 error on the login page')
+	assert_contains 'web.example.com http' "$hist" "and the history is in the index"
+	assert_contains '[hidden]' "$hist" "with XYMONAPI_HIDE applied as the API applies it"
+	assert_not_contains 'Internal Server Error' "$hist" "so the hidden text is not indexed"
+	rc=0
+	XYMONHISTDIR="" XYMONAPI_RAG_INDEX="$work/index6.npz" rag index > /dev/null || rc=$?
+	[ "$rc" -ne 0 ] || fail "off the server, index with no user succeeded against an API that asks for one"
+	assert_contains 'answered 401' "$(cat "$work/rag.err")" "off the server, the history comes through the API, which refuses without a user"
+	XYMONHISTDIR="" XYMONAPI_USER=alice XYMONAPI_PASSWORD=secret XYMONAPI_RAG_INDEX="$work/index6.npz" rag index > /dev/null \
+		|| fail "index through the API with a user failed: $(tail -n 5 "$work/rag.err")"
+	assert_contains 'web.example.com http' "$(XYMONAPI_RAG_INDEX="$work/index6.npz" rag search -k 1 --kind history 'HTTP 500 error on the login page')" "and with a user the API gives the history"
+else
+	echo "htpasswd is not installed: the index-without-credentials part did not run"
+fi
+
+pass "xymonapi-rag finds the manual-page passage and the history a question is about, on the server from xymond's files with no credential, the API and the MCP tool serve the same index, index keeps what it has, and ask hands the passages to a language model"

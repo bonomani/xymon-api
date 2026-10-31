@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Search Xymon's manual pages and its history by meaning: xymonapi-rag(1).
 
-index   reads the manual pages under XYMONAPI_RAG_DOCS and, through the API,
-        the colour changes and the status text saved at each; cuts them into
-        passages; and stores one vector per passage in XYMONAPI_RAG_INDEX.
+index   reads the manual pages under XYMONAPI_RAG_DOCS and the colour
+        changes with the status text saved at each -- from xymond's own
+        files on the Xymon server, through the API anywhere else; cuts them
+        into passages; and stores one vector per passage in XYMONAPI_RAG_INDEX.
         A passage already in the index keeps its vector: only new ones are
         embedded, and only new changes have their status text fetched.
 search  returns the passages nearest a question: from the index here, or,
@@ -175,22 +176,80 @@ def _key(p: dict) -> tuple:
     return ("docs", p["title"], p["text"])
 
 
+class _LocalHistory:
+    """The history read from xymond's own files, as xymonapi(8) reads them:
+    the same functions of xymon.py, so the task on the server sees exactly
+    what the API would answer, XYMONAPI_HIDE included, without asking it.
+    Errors are client.APIError with the status the API would have given,
+    so one caller serves both sources."""
+
+    def __init__(self, client):
+        sys.path.insert(0, str(HERE.parent))
+        import xymon                     # beside rag/ on the server
+        self.xymon, self.client = xymon, client
+        xymon.load_hide()
+
+    def _call(self, fn, *args):
+        x = self.xymon
+        try:
+            return fn(*args)
+        except x.NotFound as e:
+            raise self.client.APIError(str(e), 404) from e
+        except x.BadRequest as e:
+            raise self.client.APIError(str(e), 400) from e
+        except x.Upstream as e:
+            raise self.client.APIError(str(e), 502) from e
+        except OSError as e:
+            raise self.client.APIError(f"cannot read {e.filename}: {e.strerror}", 502) from e
+
+    def events(self, since: str, before: str | None) -> list[dict]:
+        return self._call(self.xymon.events, None, None, since, "1000", before)
+
+    def histlog(self, entity: str, test: str, epoch: int) -> str:
+        return self._call(self.xymon.histlog, entity, test, str(epoch))["text"]
+
+
+class _ApiHistory:
+    """The history read through xymonapi(8), with the token or user the
+    environment gives: what a laptop can reach."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def events(self, since: str, before: str | None) -> list[dict]:
+        return _events_when_up(self.client, since, before)
+
+    def histlog(self, entity: str, test: str, epoch: int) -> str:
+        return self.client.api("/histlog", entity=entity, test=test, time=str(epoch))["text"]
+
+
+def _history_source():
+    """Where the history comes from. On the Xymon server the task runs from
+    xymonserver.cfg, which sets XYMONHISTDIR: the files are here, readable by
+    the Xymon user as the API reads them, so no API, token or password is
+    needed to get back what this user could read anyway. Anywhere else, the
+    API."""
+    import client                        # mcp-server/client.py
+    return _LocalHistory(client) if os.environ.get("XYMONHISTDIR") else _ApiHistory(client)
+
+
 def history_passages(since: str, known: dict | None = None) -> list[dict]:
     """One passage per colour change since SINCE, with the status text saved
-    at it, read through xymonapi(8). A change in KNOWN -- the index as it
-    was -- is taken from there, its text not fetched again."""
+    at it, from xymond's files or through xymonapi(8) (_history_source). A
+    change in KNOWN -- the index as it was -- is taken from there, its text
+    not fetched again."""
     import client                        # mcp-server/client.py
+    src = _history_source()
     known = known or {}
     out = []
     try:
-        for ev in _events_since(client, since):
+        for ev in _events_since(src, since):
             key = ("history", ev["entity"], ev["test"], ev["epoch"])
             if key in known:
                 out.append(known[key])
                 continue
             try:
-                log = client.api("/histlog", entity=ev["entity"], test=ev["test"],
-                                 time=str(ev["epoch"]))["text"][:HISTLOG_TEXT]
+                log = src.histlog(ev["entity"], ev["test"], ev["epoch"])[:HISTLOG_TEXT]
             except client.APIError as e:
                 # 404 is a change whose status was not saved. Anything else --
                 # a wrong password, an API that stopped answering -- would
@@ -209,7 +268,7 @@ def history_passages(since: str, known: dict | None = None) -> list[dict]:
     return out
 
 
-def _events_since(client, since: str) -> list[dict]:
+def _events_since(src, since: str) -> list[dict]:
     """Every change since SINCE, newest first, read page by page: /events
     gives at most 1000, and before= asks for the ones older than the last.
     At most MAX_HISTORY of them, so that indexing stays minutes, not hours,
@@ -217,7 +276,7 @@ def _events_since(client, since: str) -> list[dict]:
     out: list[dict] = []
     before = None
     while len(out) < MAX_HISTORY:
-        page = _events_when_up(client, since, before)
+        page = src.events(since, before)
         out += page[:MAX_HISTORY - len(out)]
         if len(page) < 1000:
             break
@@ -299,7 +358,7 @@ def build(docs: str, since: str | None, full: bool = False) -> tuple[int, int]:
                (history_passages(since, {k: pv[0] for k, pv in known.items()}) if since else [])
     if not passages:
         raise SystemExit("xymonapi-rag: nothing to index: set XYMONAPI_RAG_DOCS, "
-                         "or let it read the history through the API")
+                         "or let it read the history")
     new = [i for i, p in enumerate(passages) if _key(p) not in known]
     fresh = embed([f'{passages[i]["title"]}\n{passages[i]["text"]}' for i in new]) if new \
         else np.zeros((0, 0), dtype="float32")
