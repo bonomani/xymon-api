@@ -73,9 +73,12 @@ the other operations need neither.
 A setup script for the machine that asks -- a laptop -- with this API's
 address and the user who asked written in: it fetches the client code at
 the commit this API was installed from (recorded by make install in a git
-checkout; the newest otherwise), runs make install-client, asks for the password once into a file of the
-user's, checks /health answers, and registers the MCP server with Claude
-Code under NAME (xymon by default; one name per Xymon server). To be read,
+checkout; the newest otherwise), runs make install-client, makes a
+virtualenv with the mcp module, checks it reaches this API and trusts its
+certificate, asks for the password once to get the machine a token (see
+TOKENS) and keeps the token, not the password, checks /health answers, and
+registers the MCP server with Claude Code, when it is installed, under
+NAME (xymon by default; one name per Xymon server). To be read,
 then run. The address is XYMONAPI_PUBLIC_URL when set, else the one the
 request came through: the web server's, with X-Forwarded-Host and
 X-Forwarded-Proto, as xymonapi-apache.conf sends them. The password is
