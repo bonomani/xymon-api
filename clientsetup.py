@@ -63,6 +63,7 @@ die() {{ printf 'xymon-setup: %s\\n' "$*" >&2; exit 1; }}
 
 command -v git >/dev/null 2>&1 || die "git is needed, to fetch {repo}"
 command -v curl >/dev/null 2>&1 || die "curl is needed"
+command -v make >/dev/null 2>&1 || die "make is needed, to install the client"
 PYTHON=${{XYMONAPI_PYTHON:-python3}}
 command -v "$PYTHON" >/dev/null 2>&1 || die "$PYTHON is needed: Python 3.10 or later"
 "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 10))' || die "$("$PYTHON" -V 2>&1) is too old; Python 3.10 or later is needed"
