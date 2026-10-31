@@ -9,16 +9,18 @@ It is an add-on. It installs into an existing Xymon server, runs as one of its
 `xymonlaunch` tasks, and uses Xymon's own settings from `xymonserver.cfg`.
 Xymon itself is unchanged and needs none of it.
 
-Its operations, all GET under `/xymon/api/v1`: `/health`, `/states`,
-`/alarms`, `/entities`, `/status` (one test's current status, text and
-acknowledgement included), `/series` (the values of one RRD dataset), `/graphs`
-(the PNG showgraph draws), `/events` (the colour changes, newest first, a
-page at a time), `/histlog` (the status text saved at one), `/search`
-(the manual-page and history passages nearest a question, by meaning) and
-`/client` (a setup script for a laptop, this API's address filled in). The
-manual page, [`xymonapi.8`](xymonapi.8), is the specification: every
-operation, every setting, and how to enable it. The OpenAPI description is
-[`openapi.yaml`](openapi.yaml), also served by the API at `/openapi.json`.
+Its operations, under `/xymon/api/v1` and all GET but for `/tokens`:
+`/health`, `/states`, `/alarms`, `/entities`, `/status` (one test's current
+status, text and acknowledgement included), `/series` (the values of one RRD
+dataset), `/graphs` (the PNG showgraph draws), `/events` (the colour changes,
+newest first, a page at a time), `/histlog` (the status text saved at one),
+`/search` (the manual-page and history passages nearest a question, by
+meaning), `/client` (a setup script for a laptop, this API's address filled
+in) and `/tokens` (a machine's own token, listed, made and revoked with your
+password). The manual page, [`xymonapi.8`](xymonapi.8), is the
+specification: every operation, every setting, and how to enable it. The
+OpenAPI description is [`openapi.yaml`](openapi.yaml), also served by the
+API at `/openapi.json`.
 
 Two more pieces run where you are, not on the server: an [MCP server](#mcp-server)
 that gives Claude the same operations as tools, and a [search](#search)
@@ -51,7 +53,7 @@ It writes into the Xymon server directory, so it is normally run as root.
 
 | installed file | from |
 |---|---|
-| `$XYMONHOME/ext/xymonapi/app.py`, `xymon.py`, `openapi.yaml`, `requirements.txt` | the files of the same name |
+| `$XYMONHOME/ext/xymonapi/app.py`, `xymon.py`, `clientsetup.py`, `tokens.py`, `openapi.yaml`, `requirements.txt` | the files of the same name |
 | `$XYMONHOME/ext/xymonapi/xymonapi.sh`, the launcher | `xymonapi.sh` |
 | `$XYMONHOME/etc/tasks.d/xymonapi`, the task, written `DISABLED` | `xymonapi.tasks.DIST`, with `@XYMONHOME@` replaced |
 | `$XYMONHOME/ext/xymonapi/rag/`, the search and its launcher, and `mcp-server/client.py` it reads the API with | `rag/xymonrag.py`, `xymonapi-rag.sh`, `requirements.txt`, `mcp-server/client.py` |
@@ -86,7 +88,9 @@ curl http://127.0.0.1:1986/xymon/api/v1/health
 
 ### On a laptop
 
-Nothing of the above. Ask the API for its setup script, read it, run it:
+Nothing of the above: `git`, `curl`, and Python 3.10 or later with its
+`venv` module, which Debian and Ubuntu package apart, as `python3-venv`.
+Ask the API for its setup script, read it, run it:
 
 ```sh
 curl -u me https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
@@ -114,7 +118,9 @@ reach, so that the script carries the address you mean and not the one a
 request happened to use.
 It clones this repository at the commit the server was installed from, so
 both sides run the same code, runs `make install-client`, makes a virtualenv
-with the `mcp` module, asks for your password once to get **this machine a
+with the `mcp` module, checks it reaches the API and trusts its certificate
+-- and stops, saying where to put the certificate, before asking for anything
+when it does not -- asks for your password once to get **this machine a
 token of its own**, named by its short hostname, keeps the token in
 `~/.config/xymon-api/xymon.token` and not the password, checks `/health`
 answers, and registers the MCP server with Claude Code. The API's `/tokens`
@@ -160,7 +166,7 @@ manual page named.
 | `XYMONAPI_RAG_LLM_URL`, `_MODEL`, `_KEY` | the language model `ask` uses: any OpenAI-compatible server, Ollama or LM Studio | a local Ollama, `llama3.1`, no key |
 | `XYMONAPI_RAG_LLM_MAX_TOKENS`, `_TIMEOUT` | the model's token budget, and how long `ask` waits | `2048`, `300` seconds |
 
-The first six are `xymonapi.8`'s; the next four `xymonapi-mcp.1`'s; the
+The first seven are `xymonapi.8`'s; the next five `xymonapi-mcp.1`'s; the
 rest `xymonapi-rag.1`'s, and the API reads `XYMONAPI_RAG_INDEX`, `_MODEL`
 and `_OFFLINE` too, for `/search`.
 
@@ -173,7 +179,7 @@ server. It listens on 127.0.0.1 unless told otherwise. From another
 machine, use HTTPS, one of:
 
 - **The API's own HTTPS.** Where the server has TLS for the Xymon protocol
-  (`xymon-tls(7)`, Xymon 4.3.33), the API finds xymond's certificate and
+  (`xymon-tls(7)`, from Xymon pull requests #617–#623, not yet merged), the API finds xymond's certificate and
   key in `etc/tls/` and speaks HTTPS on 1986 by itself; or name any
   certificate and key in `XYMONAPI_TLS_CERT` and `_KEY`. Open the port
   (`XYMONAPI_LISTEN="0.0.0.0:1986"`), then `XYMONAPI_URL=https://server:1986`
@@ -224,17 +230,20 @@ else. For Claude Code, once, at user scope so every project has it:
 ```sh
 claude mcp add --scope user xymon \
   -e XYMONAPI_URL=https://xymon.example.ch \
-  -e XYMONAPI_USER=me -e XYMONAPI_PASSWORD_FILE=/path/to/password \
+  -e XYMONAPI_TOKEN_FILE=$HOME/.config/xymon-api/xymon.token \
   -e XYMONAPI_PYTHON=/path/to/python3.12 \
   -- ~/.local/bin/xymonapi-mcp
 ```
 
-Leave out the user and password when the API asks for none -- or pass the
-password itself in `XYMONAPI_PASSWORD`, which then sits in Claude's settings
-file -- and `XYMONAPI_PYTHON` when the system `python3` has the module. For
-two Xymon servers, register twice under two names, `xymon-prod` and
-`xymon-lab`, each with its own URL and password file. The two searches
-answer a tool error until the server has an index.
+That is the registration the [setup script](#on-a-laptop) makes. By hand,
+the token is what a POST to `/tokens` with your password answers
+(`xymonapi.8`, TOKENS), written alone in that file, mode 600.
+`XYMONAPI_USER` and `XYMONAPI_PASSWORD_FILE` still work instead, but keep a
+password on the machine. Leave out the token file when the API asks for no
+password, and `XYMONAPI_PYTHON` when the system `python3` has the module.
+For two Xymon servers, register twice under two names, `xymon-prod` and
+`xymon-lab`, each with its own URL and token file. The two searches answer
+a tool error until the server has an index.
 
 For an API on another machine, see
 [Reaching the API from elsewhere](#reaching-the-api-from-elsewhere): HTTPS,
@@ -288,7 +297,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through, and its script gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, and registers the MCP server with it |
+| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` writes the user who asked, and the address the request came through, and its script gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, and registers the MCP server with it; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again |
 | `xymonapi-tokens` | a token per user and machine opens the API, replaces the last, is revoked on its own, cannot make, list or revoke tokens, is stored as its SHA-256 only, and lets the MCP client in |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled; `XYMONAPI_HIDE` blanks secrets, and a bad expression stops the API |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
@@ -299,7 +308,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 | `xymonapi-rag` | the search finds the right manual page and history passage, from the index here or the API's; `/search` and `/health` serve the index and see it change; `index` embeds only what is new; `eval` scores; `ask` reaches a language model |
 | `xymonapi-rag-eval` | ten questions about Xymon's own manual pages, all of them, score at least 8 |
 | `xymonapi-rag-startup` | `index` waits for an API that is not up yet, and not for one that refuses it |
-| `xymonapi-tls` | with xymond's certificate the API speaks HTTPS, `/client` says so, the MCP client trusts `XYMONAPI_CA`, a readable key refuses to start |
+| `xymonapi-tls` | with xymond's certificate the API speaks HTTPS, `/client` says so and its script names the certificate file before asking for a password, the MCP client trusts `XYMONAPI_CA`, a readable key refuses to start |
 
 They need `bash`, `curl`, and the Python modules of all three
 `requirements.txt` -- the API's, `mcp-server/`'s and `rag/`'s -- for `python3`,
