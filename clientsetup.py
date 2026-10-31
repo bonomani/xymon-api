@@ -7,7 +7,7 @@ never carries the password, and asks for it once, into a file of the user's.
     curl -u me https://xymon.example.ch/xymon/api/v1/client > xymon-setup.sh
     sh xymon-setup.sh
 
-?format=env gives the three settings alone, for a hand-made setup.
+?format=env gives the two settings alone, for a hand-made setup.
 """
 from __future__ import annotations
 
