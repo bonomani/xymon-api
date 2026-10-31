@@ -269,6 +269,25 @@ out in full:
 }
 ```
 
+opencode reads its own form, in `opencode.json`: the command as a list, and
+`environment` for `env`:
+
+```json
+{
+  "mcp": {
+    "xymon": {
+      "type": "local",
+      "command": ["/home/me/.local/bin/xymonapi-mcp"],
+      "environment": {
+        "XYMONAPI_URL": "https://xymon.example.ch",
+        "XYMONAPI_TOKEN_FILE": "/home/me/.config/xymon-api/xymon.token",
+        "XYMONAPI_PYTHON": "/home/me/.local/libexec/xymonapi/venv/bin/python3"
+      }
+    }
+  }
+}
+```
+
 A client in a web browser -- claude.ai, ChatGPT -- reaches only an MCP
 server over HTTP, and this one speaks stdio alone: it cannot use it.
 
