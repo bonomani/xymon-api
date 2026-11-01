@@ -114,21 +114,23 @@ sh xymon-setup.sh
 
 `/client` asks for no password, even where every other path does: the
 script carries the API's address and nothing secret -- no user, no
-password, not even the commit the server runs. The address is `XYMONAPI_PUBLIC_URL` when the server sets it, else the one
-the request came through, from its `Host` header, which the script says in
-its first lines: set `XYMONAPI_PUBLIC_URL` on any server other machines
-reach, so that the script carries the address you mean and not the one a
-request happened to use.
+password, not even the commit the server runs. The address is
+`XYMONAPI_PUBLIC_URL` when the server sets it, else the one the request
+came through, from its `Host` header, which the script says in its first
+lines: set `XYMONAPI_PUBLIC_URL` on any server other machines reach, so
+that the script carries the address you mean and not the one a request
+happened to use.
 
 The script:
 
 1. checks it reaches the API and trusts its certificate. When it does not,
    it stops there, before asking anything, and says where to put the
    certificate;
-2. asks for your user and password once, to get **this machine a token of
-   its own**, named by its short hostname, and keeps the token in
-   `~/.config/xymon-api/xymon.token`, not the password;
-3. asks `/health`, with the token, for the commit the server was installed
+2. when the API asks for a password, asks for your user and password once,
+   to get **this machine a token of its own**, named by its short hostname,
+   and keeps the token in `~/.config/xymon-api/xymon.token`, not the
+   password;
+3. asks `/health`, with the token if there is one, for the commit the server was installed
    from, clones this repository at that commit, so both sides run the same
    code, and runs `make install-client`;
 4. makes a virtualenv with the `mcp` module;
@@ -305,14 +307,14 @@ opencode reads its own form, in `~/.config/opencode/opencode.json`, or an
 A client in a web browser -- claude.ai, ChatGPT -- cannot use it: it
 reaches an MCP server from its provider's cloud, over HTTP, so the server
 would have to be open to the internet, and this one runs on your machine
-and speaks stdio. Claude Desktop, which runs on your machine, reads the JSON
-above from `claude_desktop_config.json`.
+and speaks stdio. Claude Desktop, which runs on your machine, is the way to
+use Claude without it.
 
 The token file holds what a POST to `/tokens` with your password answers
-(`xymonapi.8`, TOKENS), alone, mode 600. The setup script writes it; without
-the script, write it by hand.
-`XYMONAPI_USER` and `XYMONAPI_PASSWORD_FILE` still work instead, but keep a
-password on the machine. Leave out the token file when the API asks for no
+(`xymonapi.8`, TOKENS), alone, mode 600. The setup script writes it;
+without the script, write it by hand. `XYMONAPI_USER` and
+`XYMONAPI_PASSWORD_FILE` still work instead, but keep a password on the
+machine. Leave out the token file when the API asks for no
 password, and `XYMONAPI_PYTHON` when the system `python3` has the module.
 For two Xymon servers, register twice under two names, `xymon-prod` and
 `xymon-lab`, each with its own URL and token file. The two searches answer
@@ -335,10 +337,10 @@ DISABLED. To enable it, remove the line, install the modules in
 `XYMONAPI_RAG_DOCS` (a directory with Xymon's manual pages, `/usr/share/man`
 will do) in a file under `xymonserver.d/`. The task reads the history from
 xymond's own files, as the API does: it needs no user, password or token,
-whatever the API asks of its clients. The first run
-downloads a 65 MB embedding model, which `XYMONAPI_RAG_OFFLINE` can forbid
-once the cache is seeded, and takes about a minute; the next ones embed only
-what is new and take seconds. The index holds the last 30 days of history,
+whatever the API asks of its clients. The first run downloads a 65 MB
+embedding model, which `XYMONAPI_RAG_OFFLINE` can forbid once the cache is
+seeded, and takes about a minute; the next ones embed only what is new and
+take seconds. The index holds the last 30 days of history,
 the newest 5000 changes at most, and the API serves it at `/search` as soon
 as it is written.
 
