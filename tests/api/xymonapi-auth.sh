@@ -106,14 +106,15 @@ assert_not_contains "git clone" "$env" "and no script"
 # quote, a backslash and a glob character reaches the API as it is, and is
 # on no command line. The script is run as a laptop would, up to its health
 # check and registration: git, make, claude and codex are stubs on PATH
-# (git, claude and codex record their arguments) and the virtualenv is
+# (git, claude and codex record their arguments; git counts 3 commits
+# between the server's and the newest) and the virtualenv is
 # already there, so nothing is fetched or built.
 hard='pa ss"wo\rd*'
 htpasswd -bB "$work/htpasswd" carol "$hard" 2>/dev/null || fail "htpasswd could not add carol"
 curl -s "http://127.0.0.1:$API_PORT/xymon/api/v1/client" > "$work/carol.sh"
 lap=$work/lap
 mkdir -p "$work/stub" "$lap/src/.git" "$lap/prefix/libexec/xymonapi/venv/bin" "$lap/cfg/xymon-api"
-printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/git.args"\n' "$lap" > "$work/stub/git"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/git.args"\ncase " $* " in *" rev-list "*) echo 3 ;; esac\n' "$lap" > "$work/stub/git"
 printf '#!/bin/sh\nexit 0\n' > "$work/stub/make"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/claude.args"\n' "$lap" > "$work/stub/claude"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" >> "%s/codex.args"\n' "$lap" > "$work/stub/codex"
@@ -128,6 +129,7 @@ out=$(cd "$lap" && printf 'carol\n%s\n' "$hard" | HOME="$lap" XDG_CONFIG_HOME="$
 [ "$rc" -eq 0 ] || fail "the setup script failed with $rc: $out"
 assert_not_contains 'refused the password' "$out" "the API took carol's password from the script's curl"
 assert_contains "$(printf -- '--detach\n%s' "$commit")" "$(cat "$lap/git.args")" "the script installs the commit /health gave"
+assert_contains "the API runs commit $commit, 3 commit(s) behind the newest" "$out" "and says how far the server is behind the repository's newest, as git counts it"
 assert_contains 'the API answers' "$out" "and the script read the answer (no xymond here, so alive is false)"
 tok=$lap/cfg/xymon-api/xymon.token
 assert_file_exists "$tok"

@@ -155,6 +155,15 @@ fi
 # a branch checked out there is left as it is.
 if [ -n "$REF" ] && git -C "$SRC" rev-parse -q --verify "$REF^{{commit}}" >/dev/null; then
 	git -C "$SRC" checkout -q --detach "$REF"
+	# Whether the server is behind the repository's newest: said here, where
+	# the repository was just fetched, so that the server never has to reach
+	# the internet to know. Its admin updates it; this script cannot.
+	git -C "$SRC" remote set-head origin -a >/dev/null 2>&1 || true
+	behind=$(git -C "$SRC" rev-list --count "$REF..origin/HEAD" 2>/dev/null || true)
+	case $behind in
+		''|0) ;;
+		*) echo "the API runs commit $REF, $behind commit(s) behind the newest of {repo}: make install on the server, from an updated checkout, brings it up to date" ;;
+	esac
 else
 	[ -n "$REF" ] && echo "{repo} has no commit $REF, the one the API was installed from; taking its newest code"
 	git -C "$SRC" remote set-head origin -a >/dev/null

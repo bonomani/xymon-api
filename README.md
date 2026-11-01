@@ -78,6 +78,15 @@ where that user does not look. Install them system-wide, from your
 distribution's packages for instance, or in a virtualenv that user can read,
 and then name its `python3` in `XYMONAPI_PYTHON`, as `xymonapi.8` says.
 
+Whether a server runs the newest code: in the checkout `make install` ran
+from, this lists the commits it lacks, and prints nothing when it has them
+all. The setup script on a laptop says the same, since it fetches the
+repository anyway; the API itself never reaches the internet to find out.
+
+```sh
+git fetch -q && git log --oneline HEAD..origin/main
+```
+
 The API is installed disabled: how to enable it, where it listens, and how to
 require a password are in [`xymonapi.8`](xymonapi.8). Once it runs, with the
 default address, this checks it; what each answer means is under `/health` in
@@ -372,7 +381,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client sends no password, even one in its environment; `/client` is open and writes the address the request came through, and no user or commit; `/health` gives the commit to a user; the script asks for the user, gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, installs the commit `/health` gave, and registers the MCP server with the token, in Claude Code and Codex; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again; without `make` it says so before starting; an MCP client installed from another commit than the API's says so with each answer |
+| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client sends no password, even one in its environment; `/client` is open and writes the address the request came through, and no user or commit; `/health` gives the commit to a user; the script asks for the user, gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, installs the commit `/health` gave, says how far it is behind the newest, and registers the MCP server with the token, in Claude Code and Codex; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again; without `make` it says so before starting; an MCP client installed from another commit than the API's says so with each answer |
 | `xymonapi-tokens` | a token per user and machine opens the API, replaces the last, is revoked on its own, and deleted with its user's removal from the password file, cannot make, list or revoke tokens, is stored as its SHA-256 only, and lets the MCP client in |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled; `XYMONAPI_HIDE` blanks secrets, and a bad expression stops the API |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |
