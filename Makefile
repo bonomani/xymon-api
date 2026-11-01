@@ -40,7 +40,7 @@ install:
 	cp -f $(API) "$(EXT)/"
 	chmod 644 "$(EXT)/app.py" "$(EXT)/xymon.py" "$(EXT)/clientsetup.py" "$(EXT)/tokens.py" "$(EXT)/openapi.yaml" "$(EXT)/requirements.txt"
 	chmod 755 "$(EXT)/xymonapi.sh"
-	$(call commit)
+	$(call commit,$(EXT))
 	cp -f $(RAG) "$(EXT)/rag/"
 	cp -f mcp-server/client.py "$(EXT)/mcp-server/"
 	chmod 644 "$(EXT)/rag/xymonrag.py" "$(EXT)/rag/requirements.txt" "$(EXT)/mcp-server/client.py"
@@ -68,6 +68,7 @@ install-client:
 	cp -f $(RAG) "$(CLIENT)/rag/"
 	chmod 644 "$(CLIENT)/mcp-server/server.py" "$(CLIENT)/mcp-server/client.py" "$(CLIENT)/mcp-server/requirements.txt" "$(CLIENT)/rag/xymonrag.py" "$(CLIENT)/rag/requirements.txt"
 	chmod 755 "$(CLIENT)/mcp-server/xymonapi-mcp.sh" "$(CLIENT)/rag/xymonapi-rag.sh"
+	$(call commit,$(CLIENT))
 	printf '#!/bin/sh\nexec "%s/libexec/xymonapi/mcp-server/xymonapi-mcp.sh" "$$@"\n' '$(PREFIX)' > "$(DESTDIR)$(PREFIX)/bin/xymonapi-mcp"
 	printf '#!/bin/sh\nexec "%s/libexec/xymonapi/rag/xymonapi-rag.sh" "$$@"\n' '$(PREFIX)' > "$(DESTDIR)$(PREFIX)/bin/xymonapi-rag"
 	chmod 755 "$(DESTDIR)$(PREFIX)/bin/xymonapi-mcp" "$(DESTDIR)$(PREFIX)/bin/xymonapi-rag"
@@ -85,14 +86,15 @@ define conf
 	fi
 endef
 
-# commit -- write the commit this checkout is at to $(EXT)/COMMIT, which the
-# /client script reads so a laptop fetches the same code; from a tarball,
-# where there is no git, any COMMIT a previous install left is removed.
+# commit DIR -- write the commit this checkout is at to DIR/COMMIT: the
+# server's, which /health gives so a laptop fetches the same code, and the
+# client's, which the MCP server compares with it; from a tarball, where
+# there is no git, any COMMIT a previous install left is removed.
 define commit
 	@if c=$$(git rev-parse HEAD 2>/dev/null); then \
-		printf '%s\n' "$$c" > "$(EXT)/COMMIT"; chmod 644 "$(EXT)/COMMIT"; \
+		printf '%s\n' "$$c" > "$(1)/COMMIT"; chmod 644 "$(1)/COMMIT"; \
 	else \
-		rm -f "$(EXT)/COMMIT"; \
+		rm -f "$(1)/COMMIT"; \
 	fi
 endef
 

@@ -6,7 +6,7 @@ calls its tools. Each tool is one request to a running xymonapi(8), so what
 the client gets is what the API answers, now: nothing is stored here, and
 nothing in Xymon is changed.
 
-Where the API is, and the user to send it, are client.py's settings.
+Where the API is, and the token to send it, are client.py's settings.
 """
 from __future__ import annotations
 
@@ -33,9 +33,15 @@ def api(path: str, **params: str | None) -> dict:
     that text on to the client, and treats any other exception as a crash
     whose text it keeps back."""
     try:
-        return client.api(path, **params)
+        answer = client.api(path, **params)
     except client.APIError as e:
         raise ToolError(str(e)) from e
+    # A client older or newer than the API it reads: said with every answer,
+    # so the model can tell the user; never updated from here.
+    warning = client.version_warning()
+    if warning:
+        answer = {**answer, "warning": warning}
+    return answer
 
 
 @server.tool(annotations=READ_ONLY)

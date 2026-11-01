@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import ssl
+import sys
 import urllib.error
 import urllib.request
 from urllib.parse import urlencode, urlsplit
@@ -80,6 +82,39 @@ def open_url(req, timeout: float):
         _opener = urllib.request.build_opener(
             _NoRedirect, urllib.request.HTTPSHandler(context=_context()))
     return _opener.open(req, timeout=timeout)
+# The commit this client was installed from, written by make install-client
+# in the directory above this file -- as make install writes the server's,
+# which /health gives.
+_COMMIT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "COMMIT")
+_warning: str | None = None
+
+
+def version_warning() -> str:
+    """What to do when this client and the API run different commits, asked
+    of /health once per process; "" when they match, or either does not say
+    (a tarball, an older server), or /health does not answer. Nothing is
+    updated: the setup script does that, when someone runs it."""
+    global _warning
+    if _warning is None:
+        _warning = ""
+        try:
+            with open(_COMMIT, encoding="ascii") as fd:
+                mine = fd.readline().strip()
+            theirs = api("/health").get("commit", "")
+        except (OSError, UnicodeDecodeError, APIError):
+            return _warning
+        if mine and theirs and mine != theirs:
+            # The command, ready to copy: the address and certificate this
+            # client uses are the ones the script must be fetched with.
+            cacert = f"--cacert {shlex.quote(CA)} " if CA else ""
+            _warning = (f"the API at {URL} runs commit {theirs[:12]}, this client {mine[:12]}: "
+                        "run the setup script again to bring this machine to it: "
+                        f"curl {cacert}{URL}/xymon/api/v1/client > xymon-setup.sh && sh xymon-setup.sh")
+            # Once, on stderr, which an MCP client logs: stdout is the protocol.
+            print(f"xymonapi: {_warning}", file=sys.stderr)
+    return _warning
+
+
 # An answer of the API is a board or a list of events: never near this.
 MAX_BODY = 16 * 1024 * 1024
 

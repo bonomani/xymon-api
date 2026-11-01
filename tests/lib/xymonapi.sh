@@ -83,7 +83,8 @@ api_code() {
 # mcp URL REQUEST... -- run the MCP server for the API at URL, send it the
 # initialize handshake and then each REQUEST (one JSON-RPC message, id 3 on the
 # last), keep its stdin open until the answer to id 3 is in, and leave its
-# stdout in $work/mcp.out. Returns the server's exit status.
+# stdout in $work/mcp.out. Returns the server's exit status. The checkout's
+# MCP server, or an installed one's when MCP_ROOT names its directory.
 mcp() {
 	local url=$1 rc=0 deadline; shift
 	: > "$work/mcp.out"
@@ -94,6 +95,6 @@ mcp() {
 		while ! grep -q '"id":3' "$work/mcp.out" && [ "$(date +%s)" -lt "$deadline" ]; do
 			sleep 0.1
 		done
-	} | XYMONAPI_URL="$url" "$ROOT/mcp-server/xymonapi-mcp.sh" > "$work/mcp.out" 2> "$work/mcp.err" || rc=$?
+	} | XYMONAPI_URL="$url" "${MCP_ROOT:-$ROOT}/mcp-server/xymonapi-mcp.sh" > "$work/mcp.out" 2> "$work/mcp.err" || rc=$?
 	return "$rc"
 }

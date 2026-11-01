@@ -18,7 +18,11 @@ Python 3.10 or later with the module mcp (mcp-server/requirements.txt) and
 nothing else: the searches too are the API's. When either is missing it
 says so on stderr and exits with status 77. It writes nothing but protocol
 messages on stdout. \fBmake install-client\fR puts it under a PREFIX of
-yours, as the command xymonapi-mcp.
+yours, as the command xymonapi-mcp, and records the commit it was installed
+from. When the API's /health gives another commit, every answer carries a
+"warning" field saying so, and stderr says it once, with the command that
+runs the setup script from /client again and brings this machine to the
+API's code. Nothing is updated on its own.
 
 .SH TOOLS
 .IP "\fBhealth\fR"

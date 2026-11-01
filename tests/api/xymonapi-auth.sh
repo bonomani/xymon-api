@@ -198,6 +198,30 @@ out=$(cd "$lap" && HOME="$lap" XDG_CONFIG_HOME="$lap/cfg" XYMONAPI_SRC="$lap/src
 assert_file_exists "$lap/pip.log"
 assert_contains "pip" "$(cat "$lap/pip.log")" "a half-made venv is made again, and mcp installed in it"
 
+# A client of another commit than the API's: the MCP server says so with
+# each answer, and on stderr, and updates nothing. The client as make
+# install-client lays it out, with its COMMIT made another than the API's
+# $commit, then the same.
+"${MAKE:-make}" -C "$ROOT" install-client PREFIX="$work/client" >"$work/client.log" 2>&1 \
+	|| fail "make install-client failed: $(tail -n 5 "$work/client.log")"
+assert_file_exists "$work/client/libexec/xymonapi/COMMIT"
+printf '%s\n' fedcba9876543210fedcba9876543210fedcba98 > "$work/client/libexec/xymonapi/COMMIT"
+mine=$(curl -s -u alice:secret -X POST -H 'Content-Type: application/json' -d '{"client":"mcptest"}' "http://127.0.0.1:$API_PORT/xymon/api/v1/tokens" \
+	| sed -n 's/.*"token": *"\(xat_[A-Za-z0-9_-]*\)".*/\1/p')
+[ -n "$mine" ] || fail "the API gave alice no token"
+XYMONAPI_TOKEN="$mine" MCP_ROOT="$work/client/libexec/xymonapi" \
+	mcp "http://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true
+answer=$(grep '"id":3' "$work/mcp.out") || fail "no answer to the health call: $(tail -n 5 "$work/mcp.err")"
+assert_contains 'runs commit 0123456789ab, this client fedcba987654' "$answer" "a client of another commit is told, with the answer"
+assert_contains "curl http://127.0.0.1:$API_PORT/xymon/api/v1/client > xymon-setup.sh && sh xymon-setup.sh" "$answer" "and the command that updates it"
+assert_contains 'this client fedcba987654' "$(cat "$work/mcp.err")" "and on stderr"
+printf '%s\n' "$commit" > "$work/client/libexec/xymonapi/COMMIT"
+XYMONAPI_TOKEN="$mine" MCP_ROOT="$work/client/libexec/xymonapi" \
+	mcp "http://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true
+answer=$(grep '"id":3' "$work/mcp.out") || fail "no answer to the health call: $(tail -n 5 "$work/mcp.err")"
+assert_not_contains 'warning' "$answer" "the same commit: no warning"
+assert_contains 'alive' "$answer" "and the answer"
+
 # Xymon's own password file is the default: with XYMONHOME set and
 # etc/xymonpasswd there, nothing else need be set, and the API asks for
 # what the web pages ask for. The empty string turns it off.
