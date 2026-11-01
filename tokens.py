@@ -7,7 +7,9 @@ short hostname; the token is shown once, and only its SHA-256 is kept, in
 $XYMONAPI_TOKENS ($XYMONVAR/xymonapi/tokens by default), one JSON line per
 token. A second token for the same user and machine replaces the first, so
 each machine holds one credential, revoked on its own. Deleting a line
-revokes that token: that is how an admin revokes anyone's.
+revokes that token: that is how an admin revokes anyone's. A token whose
+user is no longer in XYMONAPI_PASSWD is refused too (xymon.has_user), so
+removing the user is enough; its lines stay as a record of their machines.
 """
 from __future__ import annotations
 

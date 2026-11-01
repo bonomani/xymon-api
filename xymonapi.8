@@ -145,7 +145,10 @@ Revokes the caller's token on NAME.
 .LP
 A user sees and revokes only their own tokens. An admin revokes anyone's by
 removing that line from $XYMONAPI_TOKENS: one JSON object per token, with
-its user, machine and SHA-256. The machine's name is the laptop's word, not
+its user, machine and SHA-256. Removing the user from XYMONAPI_PASSWD
+revokes all of theirs at once: a token is refused while its user is not in
+that file, and works again if the user is put back, since the lines stay.
+The machine's name is the laptop's word, not
 proof: it names the token, and two machines of one name share one.
 
 .SH ENVIRONMENT

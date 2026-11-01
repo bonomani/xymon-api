@@ -9,8 +9,9 @@
 # which stops working at once; a revoked one stops working too. A user sees
 # and revokes only their own tokens; a token cannot make, list or revoke
 # tokens, so a stolen one cannot renew itself; a token that is not valid, or
-# altered by one character, is refused. With no XYMONAPI_PASSWD there are no
-# users and no tokens. The MCP client sends the token from
+# altered by one character, is refused. A user removed from the password file
+# has every token refused from then on, and working again once put back. With
+# no XYMONAPI_PASSWD there are no users and no tokens. The MCP client sends the token from
 # XYMONAPI_TOKEN_FILE.
 #
 # Skips where the API cannot run (tests/lib/xymonapi.sh). Needs the xymon
@@ -91,6 +92,17 @@ assert_equal "200" "$(code "$t3" "$api/health")" "bob's laptop, of the same name
 assert_equal "404" "$(code alice:secret -X DELETE "$api/tokens/laptop")" "revoking what is not there is 404"
 assert_equal "400" "$(code alice:secret -X POST -H 'Content-Type: application/json' -d '{"client":"../x"}' "$api/tokens")" "a machine name that is not one"
 
+# A user removed from the password file: the tokens stay in the file but
+# are refused, without an admin touching the token file; put back, the user's
+# machines work again. The second write must change the file's size or time,
+# which htpasswd's does.
+htpasswd -D "$work/htpasswd" bob 2>/dev/null || fail "htpasswd could not remove bob"
+assert_equal "401" "$(code "$t3" "$api/health")" "bob removed from the password file: his token is refused"
+assert_contains 'no longer in the password file' "$(as "$t3" "$api/health")" "and told why"
+assert_contains 'bobbox' "$(cat "$work/var/tokens")" "the token lines are kept"
+htpasswd -bB "$work/htpasswd" bob s3cret 2>/dev/null || fail "htpasswd could not put bob back"
+assert_equal "200" "$(code "$t3" "$api/health")" "bob put back: his token works again"
+
 # The MCP client, with the token in XYMONAPI_TOKEN_FILE.
 printf '%s\n' "$t3" > "$work/bob.token"
 rc=0
@@ -109,4 +121,4 @@ API_PID=""
 XYMONAPI_PASSWD="" start_api
 assert_equal "400" "$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"client":"laptop"}' "http://127.0.0.1:$API_PORT/xymon/api/v1/tokens")" "tokens without XYMONAPI_PASSWD"
 
-pass "a token per user and machine opens the API, replaces the last, is revoked on its own, and cannot manage tokens"
+pass "a token per user and machine opens the API, replaces the last, is revoked on its own and with its user's removal, and cannot manage tokens"

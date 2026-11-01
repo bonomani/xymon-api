@@ -328,6 +328,10 @@ def build_app() -> FastAPI:
                 who = await run_in_threadpool(tokens.check, header[7:].strip())
                 if not who:
                     return refuse("this token is not valid, or was revoked")
+                # The owner must still be a user: removing one from the
+                # password file ends their tokens too, with no second step.
+                if not xymon.has_user(who[0]):
+                    return refuse(f"the user {who[0]} of this token is no longer in the password file")
                 request.state.user, request.state.client = who
                 log.info("%s@%s %s %s", who[0], who[1], request.method, request.url.path)
                 return await call_next(request)

@@ -462,6 +462,28 @@ def parse_basic(header: str | None) -> tuple[str, str] | None:
     return user, password
 
 
+# The users of the file, read again only when it changes: a token's owner is
+# looked up here on every request, so that removing a user from the file
+# ends their machines' access as it ends their password's.
+_users: tuple[tuple[float, int], frozenset[str]] | None = None
+
+
+def has_user(user: str) -> bool:
+    """Whether XYMONAPI_PASSWD names USER, whatever the password. A file that
+    cannot be read names nobody: a token is then refused, not let through."""
+    global _users
+    try:
+        st = os.stat(XYMONAPI_PASSWD)
+        if _users and _users[0] == (st.st_mtime, st.st_size):
+            return user in _users[1]
+        with open(XYMONAPI_PASSWD, encoding="utf-8", errors="replace") as fd:
+            names = frozenset(line.split(":", 1)[0] for line in fd if ":" in line)
+    except OSError:
+        return False
+    _users = ((st.st_mtime, st.st_size), names)
+    return user in names
+
+
 def verify_basic(user: str, password: str) -> bool:
     """Whether XYMONAPI_PASSWD holds this user with this password."""
     # A user name is an argument to htpasswd, so it may not look like an
