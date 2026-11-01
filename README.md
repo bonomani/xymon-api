@@ -1,3 +1,8 @@
+> **Moved.** This code now lives in [bonomani/xymon-plugins](https://github.com/bonomani/xymon-plugins),
+> split into three plugins: `xymonapi` (the API, server side), `xymonapi-mcp` (the MCP server)
+> and `xymonapi-rag` (the documentation and history search), each installable on its own.
+> This repository is archived and no longer updated; its history continues there.
+
 # xymon-api
 
 A read-only HTTP and JSON interface to a [Xymon](https://github.com/xymon-monitoring/xymon)
