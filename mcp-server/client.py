@@ -3,20 +3,17 @@
 server and the search in rag/ both read the API through it.
 
 XYMONAPI_URL is where the API is, http://127.0.0.1:1986 by default.
-XYMONAPI_USER and XYMONAPI_PASSWORD are sent when the API asks for a user;
-XYMONAPI_PASSWORD_FILE names a file holding the password instead, for an
-environment that other programs read too, as xymonserver.cfg's is.
-XYMONAPI_TOKEN_FILE names a file holding a client token instead -- what the
-setup script /client writes keeps -- and is used before a user and password:
-the token is this machine's own, revoked on its own (xymonapi(8), TOKENS).
-XYMONAPI_TOKEN is the token itself, for a test or a one-off.
+XYMONAPI_TOKEN_FILE names a file holding a client token -- the one the setup
+script /client writes keeps -- sent when the API asks for a user: the token
+is this machine's own, revoked on its own (xymonapi(8), TOKENS). It is the
+only credential sent: a password is never kept here. XYMONAPI_TOKEN is the
+token itself, for a test or a one-off.
 XYMONAPI_CA names the certificate, or the CA, to trust for an https:// URL
 when it is not one the system trusts already: xymond's own, from
 xymon-tls(7), which the API uses too.
 """
 from __future__ import annotations
 
-import base64
 import json
 import os
 import ssl
@@ -25,9 +22,6 @@ import urllib.request
 from urllib.parse import urlencode, urlsplit
 
 URL = os.environ.get("XYMONAPI_URL", "http://127.0.0.1:1986").rstrip("/")
-USER = os.environ.get("XYMONAPI_USER", "")
-PASSWORD = os.environ.get("XYMONAPI_PASSWORD", "")
-PASSWORD_FILE = os.environ.get("XYMONAPI_PASSWORD_FILE", "")
 CA = os.environ.get("XYMONAPI_CA", "")
 TOKEN = os.environ.get("XYMONAPI_TOKEN", "")
 TOKEN_FILE = os.environ.get("XYMONAPI_TOKEN_FILE", "")
@@ -42,17 +36,6 @@ def _token() -> str:
             return fd.readline().strip()
     except OSError as e:
         raise APIError(f"cannot read XYMONAPI_TOKEN_FILE={TOKEN_FILE}: {e.strerror}") from e
-
-
-def _password() -> str:
-    """XYMONAPI_PASSWORD, or the first line of XYMONAPI_PASSWORD_FILE."""
-    if PASSWORD or not PASSWORD_FILE:
-        return PASSWORD
-    try:
-        with open(PASSWORD_FILE, encoding="utf-8") as fd:
-            return fd.readline().rstrip("\r\n")
-    except OSError as e:
-        raise APIError(f"cannot read XYMONAPI_PASSWORD_FILE={PASSWORD_FILE}: {e.strerror}") from e
 
 
 class APIError(RuntimeError):
@@ -74,7 +57,7 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def _context() -> ssl.SSLContext:
     """Full verification, against XYMONAPI_CA when set, the system's store
-    otherwise. Never less: the password rides on this connection."""
+    otherwise. Never less: the token rides on this connection."""
     ctx = ssl.create_default_context()
     if CA:
         try:
@@ -113,9 +96,6 @@ def api(path: str, **params: str | None) -> dict:
         bearer = _token()
         if bearer:
             req.add_header("Authorization", f"Bearer {bearer}")
-        elif USER:
-            token = base64.b64encode(f"{USER}:{_password()}".encode()).decode()
-            req.add_header("Authorization", f"Basic {token}")
         with open_url(req, 30) as r:
             body = r.read(MAX_BODY + 1)
         if len(body) > MAX_BODY:
@@ -128,9 +108,8 @@ def api(path: str, **params: str | None) -> dict:
         if e.code == 401:
             detail += (" -- the token in XYMONAPI_TOKEN_FILE was revoked or replaced: run the "
                        "setup script from /client again" if (TOKEN or TOKEN_FILE) else
-                       " -- XYMONAPI_USER and XYMONAPI_PASSWORD_FILE (or XYMONAPI_PASSWORD) must "
-                       "name a user of the API's htpasswd file" if USER else
-                       " -- set XYMONAPI_TOKEN_FILE, or XYMONAPI_USER and XYMONAPI_PASSWORD_FILE")
+                       " -- set XYMONAPI_TOKEN_FILE: the setup script from /client gets this "
+                       "machine a token and writes it")
         raise APIError(f"xymonapi answered {e.code}: {detail}", e.code) from e
     except urllib.error.URLError as e:
         if isinstance(e.reason, ssl.SSLCertVerificationError):

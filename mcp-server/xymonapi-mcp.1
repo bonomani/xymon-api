@@ -67,17 +67,13 @@ Where xymonapi(8) is. The default is http://127.0.0.1:1986.
 .IP "\fBXYMONAPI_TOKEN_FILE\fR, \fBXYMONAPI_TOKEN\fR"
 A client token, from the first line of the file XYMONAPI_TOKEN_FILE names,
 or XYMONAPI_TOKEN itself: this machine's own credential (xymonapi(8),
-TOKENS), sent before a user and password are. The setup script /client
-writes keeps one and names its file here.
-.IP "\fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR, \fBXYMONAPI_PASSWORD_FILE\fR"
-The user and password sent when the API has XYMONAPI_PASSWD set. The
-password can come from the first line of the file XYMONAPI_PASSWORD_FILE
-names instead, for an environment that other programs see.
+TOKENS), and the only one sent; no password is kept on this machine. The
+setup script /client writes keeps one and names its file here.
 .IP "\fBXYMONAPI_CA\fR"
 For an https:// XYMONAPI_URL whose certificate this machine does not trust
 already: the server's certificate, or the CA that signed it, PEM. Xymond's
 own certificate, when the API uses it (xymon-tls(7)), is such a one.
-Verification is never turned off: the password rides on this connection.
+Verification is never turned off: the token rides on this connection.
 .IP "\fBXYMONAPI_PYTHON\fR"
 The Python to run with, the python3 of a virtualenv that holds mcp for
 instance. The default is python3, found on PATH.

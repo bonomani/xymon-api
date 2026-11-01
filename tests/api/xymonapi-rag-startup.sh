@@ -81,7 +81,7 @@ htpasswd -cbB "$work/passwd" alice secret > /dev/null 2>&1 || fail "htpasswd cou
 stop_process "$API_PID"; API_PID=""
 XYMONHISTDIR="$work/hist" XYMONHISTLOGS="$work/histlogs" XYMONAPI_PASSWD="$work/passwd" start_api
 export XYMONAPI_URL="http://127.0.0.1:$API_PORT"
-unset XYMONAPI_USER XYMONAPI_PASSWORD
+unset XYMONAPI_TOKEN XYMONAPI_TOKEN_FILE
 began=$(date +%s)
 rc=0
 XYMONAPI_RAG_INDEX="$work/index2.npz" "$ROOT/rag/xymonapi-rag.sh" index > /dev/null 2> "$work/rag.err" || rc=$?

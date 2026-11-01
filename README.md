@@ -169,9 +169,7 @@ manual page named.
 | `XYMONAPI_HIDE` | a file of regular expressions; what they match is `[hidden]` in every text returned | none |
 | `XYMONAPI_PYTHON` | the Python 3.10+ to run with | `python3` on PATH |
 | `XYMONAPI_URL` | where the API is, for the MCP server and the search | `http://127.0.0.1:1986` |
-| `XYMONAPI_TOKEN_FILE`, `XYMONAPI_TOKEN` | this machine's client token, from the first line of this file, or itself; sent before a user and password | none |
-| `XYMONAPI_USER`, `XYMONAPI_PASSWORD` | the user and password they send | none |
-| `XYMONAPI_PASSWORD_FILE` | the password from the first line of this file instead | none |
+| `XYMONAPI_TOKEN_FILE`, `XYMONAPI_TOKEN` | this machine's client token, from the first line of this file, or itself; the only credential they send | none |
 | `XYMONAPI_CA` | the certificate, or CA, to trust for an https:// API the system does not trust already | the system's store |
 | `XYMONAPI_RAG_DOCS` | a directory of manual pages to index | none |
 | `XYMONAPI_RAG_INDEX` | the index file | `~/.cache/xymonapi-rag/index.npz` |
@@ -182,7 +180,7 @@ manual page named.
 | `XYMONAPI_RAG_LLM_URL`, `_MODEL`, `_KEY` | the language model `ask` uses: any OpenAI-compatible server, Ollama or LM Studio | a local Ollama, `llama3.1`, no key |
 | `XYMONAPI_RAG_LLM_MAX_TOKENS`, `_TIMEOUT` | the model's token budget, and how long `ask` waits | `2048`, `300` seconds |
 
-The first seven are `xymonapi.8`'s; the next five `xymonapi-mcp.1`'s; the
+The first seven are `xymonapi.8`'s; the next three `xymonapi-mcp.1`'s; the
 rest `xymonapi-rag.1`'s, and the API reads `XYMONAPI_RAG_INDEX`, `_MODEL`
 and `_OFFLINE` too, for `/search`.
 
@@ -313,9 +311,8 @@ use Claude without it.
 
 The token file holds what a POST to `/tokens` with your password answers
 (`xymonapi.8`, TOKENS), alone, mode 600. The setup script writes it;
-without the script, write it by hand. `XYMONAPI_USER` and
-`XYMONAPI_PASSWORD_FILE` still work instead, but keep a password on the
-machine. Leave out the token file when the API asks for no
+without the script, write it by hand. It is the only credential the client
+sends: no password is kept on the machine. Leave out the token file when the API asks for no
 password, and `XYMONAPI_PYTHON` when the system `python3` has the module.
 For two Xymon servers, register twice under two names, `xymon-prod` and
 `xymon-lab`, each with its own URL and token file. The two searches answer
@@ -375,7 +372,7 @@ XYMON_SRC=/path/to/built/xymon tests/run.sh
 
 | test, under `tests/api/` | what it checks |
 |---|---|
-| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client with `XYMONAPI_PASSWORD_FILE`; `/client` is open and writes the address the request came through, and no user or commit; `/health` gives the commit to a user; the script asks for the user, gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, installs the commit `/health` gave, and registers the MCP server with the token, in Claude Code and Codex; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again; without `make` it says so before starting |
+| `xymonapi-auth` | the htpasswd file, Xymon's own by default, lets in only its users; the MCP client sends no password, even one in its environment; `/client` is open and writes the address the request came through, and no user or commit; `/health` gives the commit to a user; the script asks for the user, gets a password with a space, a quote, a backslash and a glob character to the API as it is, keeps a token for this machine's short hostname instead, installs the commit `/health` gave, and registers the MCP server with the token, in Claude Code and Codex; under `bash`, a Ctrl-C at its password prompt ends it with echo back on; a virtualenv a run before left half made is made again; without `make` it says so before starting |
 | `xymonapi-tokens` | a token per user and machine opens the API, replaces the last, is revoked on its own, and deleted with its user's removal from the password file, cannot make, list or revoke tokens, is stored as its SHA-256 only, and lets the MCP client in |
 | `xymonapi-board` | `/states`, `/alarms`, `/entities` and `/health` against a real `xymond`; `/status` gives exactly the host and test asked for, its text decoded as `xymondboard` wrote it and without the command line, and says whether it is acknowledged or disabled; `XYMONAPI_HIDE` blanks secrets, and a bad expression stops the API |
 | `xymonapi-history` | `/events` and `/histlog` read what `xymond_history` wrote, its two-letter colours included, a long history a page at a time |

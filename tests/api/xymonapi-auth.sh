@@ -221,18 +221,17 @@ XYMONAPI_PASSWD="$work/no-such-file" "$ROOT/xymonapi.sh" > "$work/nofile.log" 2>
 assert_equal "1" "$rc" "the API with a password file it cannot read"
 assert_contains "cannot read XYMONAPI_PASSWD" "$(cat "$work/nofile.log")" "and it says why"
 
-# The MCP server's client sends the user and password too, the password from
-# a file when XYMONAPI_PASSWORD_FILE names one: an environment every Xymon
-# program reads need then hold only the file's name.
+# The MCP server's client sends a token and nothing else: a user and
+# password left in its environment, as an older setup wrote them, are not
+# sent, and the refusal says to get a token. (A token letting it in is
+# xymonapi-tokens's.)
 printf 'secret\n' > "$work/password"
-start_api
-XYMONAPI_USER=alice XYMONAPI_PASSWORD_FILE="$work/password" \
+XYMONAPI_PASSWD="$work/htpasswd" start_api
+rc=0
+XYMONAPI_USER=alice XYMONAPI_PASSWORD=secret XYMONAPI_PASSWORD_FILE="$work/password" \
 	mcp "http://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || rc=$?
 answer=$(grep '"id":3' "$work/mcp.out") || fail "no answer to the health call: $(tail -n 5 "$work/mcp.err")"
-assert_contains 'alive' "$answer" "the MCP client is let in with the password from XYMONAPI_PASSWORD_FILE"
-assert_not_contains '"isError":true' "$answer" "and not refused"
-XYMONAPI_USER=alice XYMONAPI_PASSWORD_FILE="$work/no-such-file" \
-	mcp "http://127.0.0.1:$API_PORT" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true
-assert_contains 'cannot read XYMONAPI_PASSWORD_FILE' "$(grep '"id":3' "$work/mcp.out")" "a password file that is not there is a readable error"
+assert_contains 'answered 401' "$answer" "the MCP client sends no password, even one in its environment"
+assert_contains 'XYMONAPI_TOKEN_FILE' "$answer" "and says to set the token file"
 
 pass "XYMONAPI_PASSWD lets in only the users and passwords of its htpasswd file, in either format"

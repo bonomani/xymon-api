@@ -271,16 +271,16 @@ assert_contains 'cannot read the history' "$(cat "$work/rag.err")" "and says why
 # On the server the task needs no credential: with XYMONHISTDIR set, as
 # xymonserver.cfg sets it, index reads xymond's files and never asks the API,
 # which here takes a password nobody gives it. Off the server, without
-# XYMONHISTDIR, the same run is the API's 401; with a user and password it
-# reads the history through the API. XYMONAPI_HIDE applies to both.
+# XYMONHISTDIR, the same run is the API's 401; with a token it reads the
+# history through the API. XYMONAPI_HIDE applies to both.
 if command -v htpasswd >/dev/null 2>&1; then
 	htpasswd -cbB "$work/passwd" alice secret > /dev/null 2>&1 || fail "htpasswd could not write $work/passwd"
 	echo 'Internal Server Error' > "$work/hide"
 	stop_process "$API_PID"
 	API_PID=""
-	XYMONAPI_PASSWD="$work/passwd" XYMONAPI_HIDE="$work/hide" start_api
+	XYMONAPI_PASSWD="$work/passwd" XYMONAPI_HIDE="$work/hide" XYMONAPI_TOKENS="$work/tokens" start_api
 	export XYMONAPI_URL="http://127.0.0.1:$API_PORT"
-	unset XYMONAPI_USER XYMONAPI_PASSWORD XYMONAPI_TOKEN XYMONAPI_TOKEN_FILE
+	unset XYMONAPI_TOKEN XYMONAPI_TOKEN_FILE
 	XYMONAPI_HIDE="$work/hide" XYMONAPI_RAG_INDEX="$work/index5.npz" rag index > "$work/index5.out" \
 		|| fail "index on the server, with the API asking for a password, failed: $(tail -n 5 "$work/rag.err")"
 	assert_match 'indexed [0-9]+ passages' "$(cat "$work/index5.out")" "on the server, index reads the files and needs no user or token"
@@ -292,9 +292,12 @@ if command -v htpasswd >/dev/null 2>&1; then
 	XYMONHISTDIR="" XYMONAPI_RAG_INDEX="$work/index6.npz" rag index > /dev/null || rc=$?
 	[ "$rc" -ne 0 ] || fail "off the server, index with no user succeeded against an API that asks for one"
 	assert_contains 'answered 401' "$(cat "$work/rag.err")" "off the server, the history comes through the API, which refuses without a user"
-	XYMONHISTDIR="" XYMONAPI_USER=alice XYMONAPI_PASSWORD=secret XYMONAPI_RAG_INDEX="$work/index6.npz" rag index > /dev/null \
-		|| fail "index through the API with a user failed: $(tail -n 5 "$work/rag.err")"
-	assert_contains 'web.example.com http' "$(XYMONAPI_RAG_INDEX="$work/index6.npz" rag search -k 1 --kind history 'HTTP 500 error on the login page')" "and with a user the API gives the history"
+	token=$(curl -s -u alice:secret -X POST -H 'Content-Type: application/json' -d '{"client":"indexer"}' "$XYMONAPI_URL/xymon/api/v1/tokens" \
+		| sed -n 's/.*"token": *"\(xat_[A-Za-z0-9_-]*\)".*/\1/p')
+	[ -n "$token" ] || fail "the API gave alice no token"
+	XYMONHISTDIR="" XYMONAPI_TOKEN="$token" XYMONAPI_RAG_INDEX="$work/index6.npz" rag index > /dev/null \
+		|| fail "index through the API with a token failed: $(tail -n 5 "$work/rag.err")"
+	assert_contains 'web.example.com http' "$(XYMONAPI_TOKEN="$token" XYMONAPI_RAG_INDEX="$work/index6.npz" rag search -k 1 --kind history 'HTTP 500 error on the login page')" "and with a token the API gives the history"
 else
 	echo "htpasswd is not installed: the index-without-credentials part did not run"
 fi

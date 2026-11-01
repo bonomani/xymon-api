@@ -123,13 +123,11 @@ How many tokens the model may answer with, 2048 by default, and how many
 seconds ask waits for it, 300. A reasoning model counts its thinking in the
 tokens, and may spend them all on it: ask then says so. A plain model, such
 as llama3.2, is the better fit.
-.IP "\fBXYMONAPI_URL\fR, \fBXYMONAPI_TOKEN_FILE\fR, \fBXYMONAPI_USER\fR, \fBXYMONAPI_PASSWORD\fR, \fBXYMONAPI_PASSWORD_FILE\fR"
-Where the API is, and the token, or the user, to send it, as for
-xymonapi-mcp(1): for search and ask where there is no index here, and for
-index off the Xymon server. On the server, index reads the history from
-xymond's files and sends nothing. Prefer the token; a password goes in a
-file of its own that only you can read, named in XYMONAPI_PASSWORD_FILE, so
-that the environment holds only its name.
+.IP "\fBXYMONAPI_URL\fR, \fBXYMONAPI_TOKEN_FILE\fR, \fBXYMONAPI_TOKEN\fR"
+Where the API is, and the token to send it, as for xymonapi-mcp(1): for
+search and ask where there is no index here, and for index off the Xymon
+server. On the server, index reads the history from xymond's files and
+sends nothing.
 .IP "\fBXYMONAPI_PYTHON\fR"
 The Python to run with. The default is python3, found on PATH.
 

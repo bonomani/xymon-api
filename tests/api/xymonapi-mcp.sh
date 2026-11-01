@@ -132,9 +132,9 @@ for _ in $(seq 1 50); do [ -s "$work/target.port" ] && break; sleep 0.1; done
 REDIRECT_PID=$!
 for _ in $(seq 1 50); do [ -s "$work/redirect.port" ] && break; sleep 0.1; done
 [ -s "$work/redirect.port" ] || fail "the redirecting server did not start"
-XYMONAPI_USER=alice XYMONAPI_PASSWORD=secret \
+XYMONAPI_TOKEN=xat_0123456789abcdef0123456789abcdef0123456789a \
 	mcp "http://127.0.0.1:$(cat "$work/redirect.port")" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"health","arguments":{}}}' || true
-assert_contains 'Authorization: Basic' "$(cat "$work/redirect.req")" "the API's own address got the credentials"
+assert_contains 'Authorization: Bearer' "$(cat "$work/redirect.req")" "the API's own address got the token"
 assert_contains 'answered 302' "$(grep '"id":3' "$work/mcp.out")" "a redirect is a tool error"
 [ -e "$work/target.req" ] && fail "the redirect was followed, with: $(head -n 1 "$work/target.req")"
 
