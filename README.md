@@ -302,8 +302,11 @@ opencode reads its own form, in `~/.config/opencode/opencode.json`, or an
 }
 ```
 
-A client in a web browser -- claude.ai, ChatGPT -- reaches only an MCP
-server over HTTP, and this one speaks stdio alone: it cannot use it.
+A client in a web browser -- claude.ai, ChatGPT -- cannot use it: it
+reaches an MCP server from its provider's cloud, over HTTP, so the server
+would have to be open to the internet, and this one runs on your machine
+and speaks stdio. Claude Desktop, which runs on your machine, reads the JSON
+above from `claude_desktop_config.json`.
 
 The token file holds what a POST to `/tokens` with your password answers
 (`xymonapi.8`, TOKENS), alone, mode 600. The setup script writes it; without
