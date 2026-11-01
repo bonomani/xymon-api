@@ -7,9 +7,10 @@ short hostname; the token is shown once, and only its SHA-256 is kept, in
 $XYMONAPI_TOKENS ($XYMONVAR/xymonapi/tokens by default), one JSON line per
 token. A second token for the same user and machine replaces the first, so
 each machine holds one credential, revoked on its own. Deleting a line
-revokes that token: that is how an admin revokes anyone's. A token whose
-user is no longer in XYMONAPI_PASSWD is refused too (xymon.has_user), so
-removing the user is enough; its lines stay as a record of their machines.
+revokes that token: that is how an admin revokes anyone's. The first token
+seen whose user is no longer in XYMONAPI_PASSWD has all that user's lines
+deleted (revoke_user), so removing the user is enough, and a person given
+the same name later starts with no machines.
 """
 from __future__ import annotations
 
@@ -128,6 +129,16 @@ def listing(user: str) -> list[dict]:
     """USER's tokens, without the digests: which machines, since when."""
     return [{"client": e["client"], "created": e.get("created")}
             for e in _read() if e["user"] == user]
+
+
+def revoke_user(user: str) -> int:
+    """Revoke every token of USER; how many there were."""
+    with _Lock():
+        entries = _read()
+        kept = [e for e in entries if e["user"] != user]
+        if len(kept) != len(entries):
+            _write(kept)
+    return len(entries) - len(kept)
 
 
 def revoke(user: str, client: str) -> bool:

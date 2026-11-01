@@ -10,7 +10,9 @@
 # and revokes only their own tokens; a token cannot make, list or revoke
 # tokens, so a stolen one cannot renew itself; a token that is not valid, or
 # altered by one character, is refused. A user removed from the password file
-# has every token refused from then on, and working again once put back. With
+# has every token refused and deleted, so that put back, or a new user of the
+# name, they need new ones; a password file that cannot be read refuses a
+# token without deleting it. With
 # no XYMONAPI_PASSWD there are no users and no tokens. The MCP client sends the token from
 # XYMONAPI_TOKEN_FILE.
 #
@@ -92,16 +94,26 @@ assert_equal "200" "$(code "$t3" "$api/health")" "bob's laptop, of the same name
 assert_equal "404" "$(code alice:secret -X DELETE "$api/tokens/laptop")" "revoking what is not there is 404"
 assert_equal "400" "$(code alice:secret -X POST -H 'Content-Type: application/json' -d '{"client":"../x"}' "$api/tokens")" "a machine name that is not one"
 
-# A user removed from the password file: the tokens stay in the file but
-# are refused, without an admin touching the token file; put back, the user's
-# machines work again. The second write must change the file's size or time,
-# which htpasswd's does.
+# A password file that cannot be read says nothing of the user: the token is
+# refused and kept. Moved away and back, which changes nothing in it.
+mv "$work/htpasswd" "$work/htpasswd.away"
+assert_contains 'cannot be read' "$(as "$t3" "$api/health")" "an unreadable password file refuses the token"
+mv "$work/htpasswd.away" "$work/htpasswd"
+assert_contains 'bobbox' "$(cat "$work/var/tokens")" "and deletes nothing"
+assert_equal "200" "$(code "$t3" "$api/health")" "the file back, the token works"
+
+# A user removed from the password file: refused, and every token of theirs
+# deleted, without an admin touching the token file; put back, the old
+# tokens stay dead and a new one works. Each htpasswd write changes the
+# file's size, which the cached user list is keyed on.
 htpasswd -D "$work/htpasswd" bob 2>/dev/null || fail "htpasswd could not remove bob"
 assert_equal "401" "$(code "$t3" "$api/health")" "bob removed from the password file: his token is refused"
-assert_contains 'no longer in the password file' "$(as "$t3" "$api/health")" "and told why"
-assert_contains 'bobbox' "$(cat "$work/var/tokens")" "the token lines are kept"
+grep -q 'bobbox' "$work/var/tokens" && fail "bob's tokens were kept after his removal: $(cat "$work/var/tokens")"
+assert_contains 'desktop' "$(cat "$work/var/tokens")" "alice's are not touched"
 htpasswd -bB "$work/htpasswd" bob s3cret 2>/dev/null || fail "htpasswd could not put bob back"
-assert_equal "200" "$(code "$t3" "$api/health")" "bob put back: his token works again"
+assert_equal "401" "$(code "$t3" "$api/health")" "bob put back: his old token stays revoked"
+t3=$(issue bob:s3cret laptop)
+assert_equal "200" "$(code "$t3" "$api/health")" "and a new one works"
 
 # The MCP client, with the token in XYMONAPI_TOKEN_FILE.
 printf '%s\n' "$t3" > "$work/bob.token"
@@ -121,4 +133,4 @@ API_PID=""
 XYMONAPI_PASSWD="" start_api
 assert_equal "400" "$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"client":"laptop"}' "http://127.0.0.1:$API_PORT/xymon/api/v1/tokens")" "tokens without XYMONAPI_PASSWD"
 
-pass "a token per user and machine opens the API, replaces the last, is revoked on its own and with its user's removal, and cannot manage tokens"
+pass "a token per user and machine opens the API, replaces the last, is revoked on its own and deleted with its user's removal, and cannot manage tokens"

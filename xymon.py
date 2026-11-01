@@ -468,9 +468,10 @@ def parse_basic(header: str | None) -> tuple[str, str] | None:
 _users: tuple[tuple[float, int], frozenset[str]] | None = None
 
 
-def has_user(user: str) -> bool:
-    """Whether XYMONAPI_PASSWD names USER, whatever the password. A file that
-    cannot be read names nobody: a token is then refused, not let through."""
+def has_user(user: str) -> bool | None:
+    """Whether XYMONAPI_PASSWD names USER, whatever the password; None when
+    the file cannot be read, which says nothing of USER: a token is then
+    refused, but not revoked."""
     global _users
     try:
         st = os.stat(XYMONAPI_PASSWD)
@@ -479,7 +480,7 @@ def has_user(user: str) -> bool:
         with open(XYMONAPI_PASSWD, encoding="utf-8", errors="replace") as fd:
             names = frozenset(line.split(":", 1)[0] for line in fd if ":" in line)
     except OSError:
-        return False
+        return None
     _users = ((st.st_mtime, st.st_size), names)
     return user in names
 

@@ -330,8 +330,17 @@ def build_app() -> FastAPI:
                     return refuse("this token is not valid, or was revoked")
                 # The owner must still be a user: removing one from the
                 # password file ends their tokens too, with no second step.
-                if not xymon.has_user(who[0]):
-                    return refuse(f"the user {who[0]} of this token is no longer in the password file")
+                # They are deleted, not only refused, so that a person given
+                # the name later does not inherit the machines. A file that
+                # cannot be read says nothing of the user: refused, kept.
+                known = xymon.has_user(who[0])
+                if known is None:
+                    return refuse("the password file cannot be read")
+                if not known:
+                    n = await run_in_threadpool(tokens.revoke_user, who[0])
+                    log.info("%s is no longer in the password file: %d token(s) revoked", who[0], n)
+                    return refuse(f"the user {who[0]} of this token is no longer in the password file; "
+                                  "their tokens are revoked")
                 request.state.user, request.state.client = who
                 log.info("%s@%s %s %s", who[0], who[1], request.method, request.url.path)
                 return await call_next(request)
